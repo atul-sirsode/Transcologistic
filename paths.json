@@ -1,0 +1,59 @@
+﻿
+
+/api/auth/login_otp                  : @{post=}
+/api/auth/login_verify_otp           : @{post=}
+/api/file-history                    : @{get=; post=}
+/api/file-history/{id}               : @{get=; delete=}
+/api/file-history/search             : @{get=}
+/api/file-history/stats              : @{get=}
+/api/rc/rc_verify                    : @{post=}
+/api/v1/rc/rc_verify                 : @{post=}
+/api/v2/rc/rc_verify                 : @{post=}
+/api/states-cities/get-states        : @{get=}
+/api/states-cities/get-city-by-state : @{get=}
+/api/states-cities/stats             : @{get=}
+/api/states-cities/insert-city       : @{post=}
+/api/states-cities/delete-city       : @{delete=}
+/api/tollguru/analyze-tolls          : @{post=}
+/api/tollguru/compare-routes         : @{post=}
+/api/tollguru/toll-statistics        : @{post=}
+/api/tollguru/get-toll-info          : @{post=}
+/api/tollguru/vehicle-types          : @{get=}
+/api/tollguru/vehicle-description    : @{post=}
+/api/users/login                     : @{post=}
+/api/users/get-user-info             : @{post=}
+/api/users/get-user-permissions      : @{post=}
+/api/users/get-all-active-users      : @{get=}
+/api/users/create                    : @{post=}
+/api/users/update                    : @{put=}
+/api/users/delete                    : @{delete=}
+/api/permissions                     : @{get=}
+/api/permissions/create              : @{post=}
+/api/permissions/update              : @{put=}
+/api/permissions/delete              : @{delete=}
+/api/roles                           : @{get=}
+/api/roles/create                    : @{post=}
+/api/roles/update                    : @{put=}
+/api/roles/delete                    : @{delete=}
+/api/banks                           : @{get=}
+/api/banks/create                    : @{post=}
+/api/banks/update                    : @{put=}
+/api/banks/delete                    : @{delete=}
+/api/user-permissions                : @{get=}
+/api/user-permissions/create         : @{post=}
+/api/user-permissions/update         : @{put=}
+/api/user-permissions/delete         : @{delete=}
+/api/role-permissions                : @{get=}
+/api/role-permissions/create         : @{post=}
+/api/role-permissions/update         : @{put=}
+/api/role-permissions/delete         : @{delete=}
+/api/user-roles                      : @{get=}
+/api/user-roles/create               : @{post=}
+/api/user-roles/delete               : @{delete=}
+/api/user-security-flags             : @{get=}
+/api/user-security-flags/create      : @{post=}
+/api/user-security-flags/update      : @{put=}
+/api/user-security-flags/delete      : @{delete=}
+
+
+

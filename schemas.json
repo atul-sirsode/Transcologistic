@@ -1,0 +1,49 @@
+﻿
+
+LoginDetails                  : @{type=object; required=System.Object[]; properties=}
+LoginOTPResponse              : @{type=object; properties=}
+VerifyOtp                     : @{type=object; required=System.Object[]; properties=}
+VerifyOTPResponse             : @{type=object; properties=}
+FileHistoryEntry              : @{type=object; properties=}
+RcDetails                     : @{type=object; required=System.Object[]; properties=}
+RCApiResponse                 : @{type=object; properties=}
+ApiErrorResponse              : @{type=object; properties=}
+State                         : @{type=object; properties=}
+City                          : @{type=object; properties=}
+InsertCityRequest             : @{type=object; required=System.Object[]; properties=}
+DeleteCityRequest             : @{type=object; required=System.Object[]; properties=}
+InsertCityResponse            : @{type=object; properties=}
+StatesResponse                : @{type=object; properties=}
+CitiesResponse                : @{type=object; properties=}
+TollCalculationOptions        : @{type=object; properties=}
+EnhancedTollGuruRequest       : @{type=object; required=System.Object[]; properties=}
+TollAnalysisResponse          : @{type=object; properties=}
+TollGuruLocation              : @{type=object; required=System.Object[]; properties=}
+TollGuruVehicle               : @{type=object; required=System.Object[]; properties=}
+TollGuruRequest               : @{type=object; required=System.Object[]; properties=}
+TollGuruApiResponse           : @{type=object; properties=}
+LoginRequest                  : @{type=object; required=System.Object[]; properties=}
+LoginResponse                 : @{type=object; properties=}
+GetUserInfoRequest            : @{type=object; required=System.Object[]; properties=}
+GetUserInfoResponse           : @{type=object; properties=}
+PermissionWithStatus          : @{type=object; properties=}
+GetUserPermissionsResponse    : @{type=object; properties=}
+UserApiResponse               : @{type=object; properties=}
+UserPermission                : @{type=object; properties=}
+CreateUserPermissionRequest   : @{type=object; required=System.Object[]; properties=}
+UpdateUserPermissionRequest   : @{type=object; required=System.Object[]; properties=}
+DeleteUserPermissionRequest   : @{type=object; required=System.Object[]; properties=}
+RolePermission                : @{type=object; properties=}
+CreateRolePermissionRequest   : @{type=object; required=System.Object[]; properties=}
+UpdateRolePermissionRequest   : @{type=object; required=System.Object[]; properties=}
+DeleteRolePermissionRequest   : @{type=object; required=System.Object[]; properties=}
+UserRole                      : @{type=object; properties=}
+CreateUserRoleRequest         : @{type=object; required=System.Object[]; properties=}
+DeleteUserRoleRequest         : @{type=object; required=System.Object[]; properties=}
+UserSecurityFlag              : @{type=object; properties=}
+CreateUserSecurityFlagRequest : @{type=object; required=System.Object[]; properties=}
+UpdateUserSecurityFlagRequest : @{type=object; required=System.Object[]; properties=}
+DeleteUserSecurityFlagRequest : @{type=object; required=System.Object[]; properties=}
+
+
+
