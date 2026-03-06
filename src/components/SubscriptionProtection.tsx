@@ -17,7 +17,7 @@ export function SubscriptionProtection({
 }: SubscriptionProtectionProps) {
   const { username, logout } = useAuth();
   const navigate = useNavigate();
-  const { startCountdown, stopCountdown } = useCountdown();
+  const { startCountdown, resetCountdown } = useCountdown();
   const [isChecking, setIsChecking] = useState(true);
   const [isValid, setIsValid] = useState(true);
   const [initialized, setInitialized] = useState(false);
@@ -39,7 +39,7 @@ export function SubscriptionProtection({
         if (!initialized) {
           subscriptionMiddleware.initialize(logout, {
             onCountdownStart: startCountdown,
-            onCountdownStop: stopCountdown,
+            onCountdownStop: resetCountdown,
           });
           setInitialized(true);
         }
@@ -47,10 +47,16 @@ export function SubscriptionProtection({
         if (result.isExpired) {
           setIsValid(false);
           // The middleware will handle the countdown and delayed logout
+          console.log(
+            "SubscriptionProtection: Subscription expired, countdown should start",
+          );
         } else {
           setIsValid(true);
           // Stop any active countdown when subscription is valid
-          stopCountdown();
+          console.log(
+            "SubscriptionProtection: Subscription valid, stopping countdown",
+          );
+          resetCountdown();
         }
       } catch (error) {
         console.error(
@@ -64,7 +70,7 @@ export function SubscriptionProtection({
     };
 
     checkSubscriptionStatus();
-  }, [username, logout, navigate, initialized, startCountdown, stopCountdown]);
+  }, [username, logout, navigate, initialized, startCountdown, resetCountdown]);
 
   // Show loading while checking subscription
   if (isChecking) {

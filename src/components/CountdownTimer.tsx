@@ -7,6 +7,7 @@ export function CountdownTimer() {
   const { isActive, seconds, message, stopCountdown } = useCountdown();
   const [timeLeft, setTimeLeft] = useState(seconds);
   const [isCompleted, setIsCompleted] = useState(false);
+  const [wasActive, setWasActive] = useState(false);
 
   console.log("CountdownTimer: State:", {
     isActive,
@@ -14,13 +15,26 @@ export function CountdownTimer() {
     message,
     timeLeft,
     isCompleted,
+    wasActive,
   });
 
-  // Reset timeLeft and isCompleted when seconds changes or countdown restarts
+  // Reset states when countdown is reset
   useEffect(() => {
-    setTimeLeft(seconds);
-    setIsCompleted(false);
-  }, [seconds, isActive]);
+    if (!isActive && seconds === 0 && message === "") {
+      setTimeLeft(0);
+      setIsCompleted(false);
+      setWasActive(false);
+    }
+  }, [isActive, seconds, message]);
+
+  // Track when countdown becomes active
+  useEffect(() => {
+    if (isActive) {
+      setWasActive(true);
+      setTimeLeft(seconds);
+      setIsCompleted(false);
+    }
+  }, [isActive, seconds]);
 
   useEffect(() => {
     if (!isActive || timeLeft <= 0) {
@@ -62,7 +76,8 @@ export function CountdownTimer() {
     return "destructive";
   };
 
-  if (isCompleted) {
+  // Only show completed state if countdown was running and has now completed
+  if (isCompleted && wasActive) {
     return (
       <Alert variant="destructive" className="mb-4 animate-pulse">
         <AlertTriangle className="h-4 w-4" />
@@ -71,6 +86,11 @@ export function CountdownTimer() {
         </AlertDescription>
       </Alert>
     );
+  }
+
+  // Don't render anything if countdown is not active
+  if (!isActive) {
+    return null;
   }
 
   return (
