@@ -1,6 +1,13 @@
 const BASE_DOMAIN = import.meta.env.VITE_BASE_DOMAIN || "http://localhost:3000";
 import { httpClient } from "./http-client";
 
+// Cache for user permissions to avoid duplicate API calls
+const permissionsCache = new Map<
+  number,
+  { data: UserPermission[]; timestamp: number }
+>();
+const CACHE_DURATION = 5000; // 5 seconds
+
 export interface UserSecurityResponse {
   status: boolean;
   message: string;
@@ -41,9 +48,42 @@ export async function getUserSecurityWithMenuRights(
   userId: number,
 ): Promise<UserSecurityData | null> {
   try {
+    // Check cache first
+    const cached = permissionsCache.get(userId);
+    if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
+      console.log("Using cached permissions for user:", userId);
+      const data = cached.data;
+
+      if (data && Array.isArray(data)) {
+        const permissions = data as UserPermission[];
+        const firstPermission = permissions[0];
+
+        if (firstPermission) {
+          const securityData: UserSecurityData = {
+            user_id: firstPermission.user_id,
+            username: firstPermission.user_email.split("@")[0],
+            display_name: firstPermission.user_email.split("@")[0],
+            email: firstPermission.user_email,
+            permissions: permissions,
+            is_admin: false,
+            bypass_otp: false,
+            mfa_enrolled: false,
+          };
+          return securityData;
+        }
+      }
+    }
+
+    // Make API call if not cached or cache expired
+    console.log("Fetching fresh permissions for user:", userId);
     const data = await httpClient.get<UserPermission[]>(
       `/api/user-permissions/${userId}`,
     );
+
+    // Cache the response
+    if (data && Array.isArray(data)) {
+      permissionsCache.set(userId, { data, timestamp: Date.now() });
+    }
 
     // Handle the API response structure - httpClient returns the array directly
     if (data && Array.isArray(data)) {
@@ -135,4 +175,17 @@ export async function getUserSecurityFlags(
   userId: number,
 ): Promise<UserSecurityData | null> {
   return getUserSecurityWithMenuRights(userId);
+}
+
+/**
+ * Clear cached permissions for a specific user or all users
+ */
+export function clearPermissionsCache(userId?: number) {
+  if (userId) {
+    permissionsCache.delete(userId);
+    console.log("Cleared permissions cache for user:", userId);
+  } else {
+    permissionsCache.clear();
+    console.log("Cleared all permissions cache");
+  }
 }
