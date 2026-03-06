@@ -85,6 +85,15 @@ class SubscriptionMiddleware {
       const daysRemaining = subscriptionService.getDaysRemaining(subscription);
       const isExpired = subscriptionService.isExpired(subscription);
 
+      console.log("SubscriptionMiddleware: Debug info:", {
+        username,
+        subscription,
+        daysRemaining,
+        isExpired,
+        endDate: subscription.end_date,
+        currentDate: new Date().toISOString(),
+      });
+
       const result = {
         isValid: !isExpired,
         isExpired,

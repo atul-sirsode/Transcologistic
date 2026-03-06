@@ -75,6 +75,16 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { toast } from "@/hooks/use-toast";
@@ -317,6 +327,8 @@ export default function FastTag() {
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [editingEntry, setEditingEntry] = useState<HistoryEntry | null>(null);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<HistoryEntry | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const [savingSession, setSavingSession] = useState(false);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
 
@@ -775,11 +787,27 @@ export default function FastTag() {
 
   // Delete history entry from DB and state
   const handleDeleteHistory = async (id: string) => {
+    // Find the entry to delete and set it as target for confirmation
+    const entry = history.find((h) => h.id === id);
+    if (entry) {
+      setDeleteTarget(entry);
+    }
+  };
+
+  // Confirm delete after AlertDialog confirmation
+  const handleConfirmDelete = async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
     try {
       if (currentSessionId) {
-        await fastTagService.deleteHistoryEntry(currentSessionId, id);
+        await fastTagService.deleteHistoryEntry(
+          currentSessionId,
+          deleteTarget.id,
+        );
       }
-      const updated = recalcBalances(history.filter((h) => h.id !== id));
+      const updated = recalcBalances(
+        history.filter((h) => h.id !== deleteTarget.id),
+      );
       setHistory(updated);
       toast({ title: "Transaction deleted from database" });
     } catch (err: unknown) {
@@ -791,6 +819,9 @@ export default function FastTag() {
         description: errorMessage,
         variant: "destructive",
       });
+    } finally {
+      setDeleting(false);
+      setDeleteTarget(null);
     }
   };
 
@@ -1306,9 +1337,7 @@ export default function FastTag() {
                                     variant="ghost"
                                     size="icon"
                                     className="text-destructive hover:text-destructive"
-                                    onClick={() =>
-                                      handleDeleteHistory(entry.id)
-                                    }
+                                    onClick={() => setDeleteTarget(entry)}
                                   >
                                     <Trash2 className="w-4 h-4" />
                                   </Button>
@@ -1873,9 +1902,7 @@ export default function FastTag() {
                                     variant="ghost"
                                     size="icon"
                                     className="text-destructive hover:text-destructive"
-                                    onClick={() =>
-                                      handleDeleteHistory(entry.id)
-                                    }
+                                    onClick={() => setDeleteTarget(entry)}
                                   >
                                     <Trash2 className="w-4 h-4" />
                                   </Button>
@@ -2042,6 +2069,35 @@ export default function FastTag() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog
+        open={!!deleteTarget}
+        onOpenChange={(open) => !open && setDeleteTarget(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Transaction</AlertDialogTitle>
+            <AlertDialogDescription>
+              This record action cannot be undone. Are you sure you want to
+              delete this transaction?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleConfirmDelete}
+              disabled={deleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deleting ? (
+                <Loader2 className="w-4 h-4 animate-spin mr-2" />
+              ) : null}
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </AppLayout>
   );
 }

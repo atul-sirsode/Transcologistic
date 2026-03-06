@@ -8,49 +8,59 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { CalendarIcon, Save, Users } from "lucide-react";
+import { CalendarIcon, Save, Users, Pencil, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
-import { getAdminSettings } from "@/lib/admin-settings";
 import { subscriptionService } from "@/services/subscription-service";
 import type { Subscription } from "@/models/subscription";
+import type { ActiveUser } from "@/services/subscription-service";
+import { SearchableSelect } from "@/components/SearchableSelect";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 export default function ManageSubscription() {
   const { toast } = useToast();
-  const [users, setUsers] = useState<string[]>([]);
+  const [activeUsers, setActiveUsers] = useState<ActiveUser[]>([]);
   const [selectedUser, setSelectedUser] = useState("");
   const [startDate, setStartDate] = useState<Date>();
   const [validityDays, setValidityDays] = useState("30");
   const [saving, setSaving] = useState(false);
   const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
   const [loading, setLoading] = useState(true);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Subscription | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
-    const settings = getAdminSettings();
-    setUsers(settings.users.map((u) => u.username));
+    loadUsers();
     loadSubscriptions();
   }, []);
+
+  const loadUsers = async () => {
+    const users = await subscriptionService.getActiveUsers();
+    setActiveUsers(users);
+  };
 
   const loadSubscriptions = async () => {
     try {
       setLoading(true);
       const data = await subscriptionService.getAllSubscriptions();
-      // Ensure data is an array before setting it
-      setSubscriptions(Array.isArray(data) ? data : []);
-    } catch (error) {
-      console.error("Failed to load subscriptions:", error);
-      setSubscriptions([]);
+      console.log("subs data", data);
+      setSubscriptions(data);
+    } catch {
+      // ignore
     } finally {
       setLoading(false);
     }
@@ -58,7 +68,7 @@ export default function ManageSubscription() {
 
   // When user is selected, load their existing subscription
   useEffect(() => {
-    if (!selectedUser) return;
+    if (!selectedUser || editingId) return;
     const existing = subscriptions.find((s) => s.username === selectedUser);
     if (existing) {
       setStartDate(new Date(existing.start_date));
@@ -67,7 +77,42 @@ export default function ManageSubscription() {
       setStartDate(undefined);
       setValidityDays("30");
     }
-  }, [selectedUser, subscriptions]);
+  }, [selectedUser, subscriptions, editingId]);
+
+  const resetForm = () => {
+    setSelectedUser("");
+    setStartDate(undefined);
+    setValidityDays("30");
+    setEditingId(null);
+  };
+
+  const handleEdit = (sub: Subscription) => {
+    setEditingId(sub.id);
+    setSelectedUser(sub.username);
+    setStartDate(new Date(sub.start_date));
+    setValidityDays(String(sub.validity_days));
+  };
+
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    try {
+      await subscriptionService.deleteSubscription(deleteTarget.id);
+      toast({ title: "Subscription deleted successfully" });
+      await loadSubscriptions();
+      if (editingId === deleteTarget.id) resetForm();
+    } catch (e: unknown) {
+      toast({
+        title: "Error deleting subscription",
+        description:
+          e instanceof Error ? e.message : "An unknown error occurred",
+        variant: "destructive",
+      });
+    } finally {
+      setDeleting(false);
+      setDeleteTarget(null);
+    }
+  };
 
   const handleSave = async () => {
     if (!selectedUser || !startDate || !validityDays) {
@@ -76,25 +121,36 @@ export default function ManageSubscription() {
     }
     setSaving(true);
     try {
-      await subscriptionService.saveSubscription({
+      const input = {
         username: selectedUser,
         start_date: format(startDate, "yyyy-MM-dd"),
         validity_days: parseInt(validityDays),
-      });
-      toast({ title: "Subscription saved successfully" });
+      };
+      if (editingId) {
+        await subscriptionService.updateSubscription(editingId, input);
+        toast({ title: "Subscription updated successfully" });
+      } else {
+        await subscriptionService.saveSubscription(input);
+        toast({ title: "Subscription saved successfully" });
+      }
+      resetForm();
       await loadSubscriptions();
     } catch (e: unknown) {
-      const errorMessage =
-        e instanceof Error ? e.message : "An unknown error occurred";
+      const error = e as Error;
       toast({
         title: "Error saving subscription",
-        description: errorMessage,
+        description: error.message,
         variant: "destructive",
       });
     } finally {
       setSaving(false);
     }
   };
+
+  const userOptions = activeUsers.map((u) => ({
+    label: u.username || u.email,
+    value: u.email,
+  }));
 
   return (
     <AppLayout>
@@ -113,24 +169,20 @@ export default function ManageSubscription() {
           <Card>
             <CardHeader>
               <CardTitle className="text-base flex items-center gap-2">
-                <Users className="w-4 h-4" /> Subscription Details
+                <Users className="w-4 h-4" />{" "}
+                {editingId ? "Edit Subscription" : "Subscription Details"}
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
                 <Label>Select User</Label>
-                <Select value={selectedUser} onValueChange={setSelectedUser}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Choose a user..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {users.map((u) => (
-                      <SelectItem key={u} value={u}>
-                        {u}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <SearchableSelect
+                  value={selectedUser}
+                  onValueChange={setSelectedUser}
+                  placeholder="Choose a user..."
+                  disabled={!!editingId}
+                  options={userOptions}
+                />
               </div>
 
               <div className="space-y-2">
@@ -188,10 +240,25 @@ export default function ManageSubscription() {
                 </div>
               )}
 
-              <Button onClick={handleSave} disabled={saving} className="w-full">
-                <Save className="w-4 h-4 mr-2" />
-                {saving ? "Saving..." : "Save Subscription"}
-              </Button>
+              <div className="flex gap-2">
+                <Button
+                  onClick={handleSave}
+                  disabled={saving}
+                  className="flex-1"
+                >
+                  <Save className="w-4 h-4 mr-2" />
+                  {saving
+                    ? "Saving..."
+                    : editingId
+                      ? "Update Subscription"
+                      : "Save Subscription"}
+                </Button>
+                {editingId && (
+                  <Button variant="outline" onClick={resetForm}>
+                    Cancel
+                  </Button>
+                )}
+              </div>
             </CardContent>
           </Card>
 
@@ -203,8 +270,7 @@ export default function ManageSubscription() {
             <CardContent>
               {loading ? (
                 <p className="text-sm text-muted-foreground">Loading...</p>
-              ) : !Array.isArray(subscriptions) ||
-                subscriptions.length === 0 ? (
+              ) : subscriptions.length === 0 ? (
                 <p className="text-sm text-muted-foreground">
                   No subscriptions found
                 </p>
@@ -212,31 +278,51 @@ export default function ManageSubscription() {
                 <div className="space-y-3">
                   {subscriptions.map((sub) => {
                     const daysLeft = subscriptionService.getDaysRemaining(sub);
-                    const expired = daysLeft < 0;
-                    const warning = daysLeft >= 0 && daysLeft <= 7;
+                    const expired = subscriptionService.isExpired(sub);
+                    const warning = daysLeft > 0 && daysLeft <= 7;
                     return (
                       <div
                         key={sub.id}
                         className="flex items-center justify-between p-3 rounded-md border"
                       >
-                        <div>
-                          <p className="font-medium text-sm">{sub.username}</p>
+                        <div className="min-w-0 flex-1">
+                          <p className="font-medium text-sm truncate">
+                            {sub.username}
+                          </p>
                           <p className="text-xs text-muted-foreground">
                             {sub.start_date} → {sub.end_date} (
                             {sub.validity_days}d)
                           </p>
                         </div>
-                        <Badge
-                          variant={
-                            expired
-                              ? "destructive"
-                              : warning
-                                ? "secondary"
-                                : "default"
-                          }
-                        >
-                          {expired ? "Expired" : `${daysLeft}d left`}
-                        </Badge>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <Badge
+                            variant={
+                              expired
+                                ? "destructive"
+                                : warning
+                                  ? "secondary"
+                                  : "default"
+                            }
+                          >
+                            {expired ? "Expired" : `${daysLeft}d left`}
+                          </Badge>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7"
+                            onClick={() => handleEdit(sub)}
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 text-destructive hover:text-destructive"
+                            onClick={() => setDeleteTarget(sub)}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
                       </div>
                     );
                   })}
@@ -246,6 +332,33 @@ export default function ManageSubscription() {
           </Card>
         </div>
       </div>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog
+        open={!!deleteTarget}
+        onOpenChange={(open) => !open && setDeleteTarget(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Subscription</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete the subscription for{" "}
+              <strong>{deleteTarget?.username}</strong>? This action cannot be
+              undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDelete}
+              disabled={deleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deleting ? "Deleting..." : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </AppLayout>
   );
 }
