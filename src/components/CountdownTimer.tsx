@@ -8,11 +8,19 @@ export function CountdownTimer() {
   const [timeLeft, setTimeLeft] = useState(seconds);
   const [isCompleted, setIsCompleted] = useState(false);
 
-  // Reset timeLeft when seconds changes
+  console.log("CountdownTimer: State:", {
+    isActive,
+    seconds,
+    message,
+    timeLeft,
+    isCompleted,
+  });
+
+  // Reset timeLeft and isCompleted when seconds changes or countdown restarts
   useEffect(() => {
     setTimeLeft(seconds);
     setIsCompleted(false);
-  }, [seconds]);
+  }, [seconds, isActive]);
 
   useEffect(() => {
     if (!isActive || timeLeft <= 0) {

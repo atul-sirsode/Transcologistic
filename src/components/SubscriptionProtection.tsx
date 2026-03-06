@@ -49,6 +49,8 @@ export function SubscriptionProtection({
           // The middleware will handle the countdown and delayed logout
         } else {
           setIsValid(true);
+          // Stop any active countdown when subscription is valid
+          stopCountdown();
         }
       } catch (error) {
         console.error(
