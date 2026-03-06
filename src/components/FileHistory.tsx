@@ -1,9 +1,19 @@
-import { useState, useEffect, useCallback } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { History, Download, Upload, FileSpreadsheet, Trash2, CheckSquare, Square, FileDown, FileText } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Badge } from '@/components/ui/badge';
+import { useState, useEffect, useCallback } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import {
+  History,
+  Download,
+  Upload,
+  FileSpreadsheet,
+  Trash2,
+  CheckSquare,
+  Square,
+  FileDown,
+  FileText,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Badge } from "@/components/ui/badge";
 import {
   FileHistoryEntry,
   getFileHistory,
@@ -11,8 +21,8 @@ import {
   downloadMultipleFiles,
   deleteFileFromHistory,
   formatFileSize,
-} from '@/lib/file-history-api';
-import { toast } from 'sonner';
+} from "@/lib/file-history-api";
+import { toast } from "sonner";
 
 interface FileHistoryProps {
   refreshTrigger?: number;
@@ -28,7 +38,7 @@ export function FileHistory({ refreshTrigger }: FileHistoryProps) {
       const data = await getFileHistory();
       setEntries(data);
     } catch {
-      console.error('Failed to load file history');
+      console.error("Failed to load file history");
     } finally {
       setLoading(false);
     }
@@ -39,7 +49,7 @@ export function FileHistory({ refreshTrigger }: FileHistoryProps) {
   }, [loadHistory, refreshTrigger]);
 
   const toggleSelect = (id: number) => {
-    setSelected(prev => {
+    setSelected((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
       else next.add(id);
@@ -51,7 +61,7 @@ export function FileHistory({ refreshTrigger }: FileHistoryProps) {
     if (selected.size === entries.length) {
       setSelected(new Set());
     } else {
-      setSelected(new Set(entries.map(e => e.id)));
+      setSelected(new Set(entries.map((e) => e.id)));
     }
   };
 
@@ -60,71 +70,82 @@ export function FileHistory({ refreshTrigger }: FileHistoryProps) {
       await downloadFileFromHistory(entry);
       toast.success(`Downloaded ${entry.same_file_name}`);
     } catch {
-      toast.error('Download failed');
+      toast.error("Download failed");
     }
   };
 
   const handleDownloadSelected = async () => {
-    const selectedEntries = entries.filter(e => selected.has(e.id));
+    const selectedEntries = entries.filter((e) => selected.has(e.id));
     if (selectedEntries.length === 0) return;
     try {
       await downloadMultipleFiles(selectedEntries);
       toast.success(`Downloaded ${selectedEntries.length} file(s)`);
     } catch {
-      toast.error('Some downloads failed');
+      toast.error("Some downloads failed");
     }
   };
 
   const handleDelete = async (id: number) => {
     try {
       await deleteFileFromHistory(id);
-      setEntries(prev => prev.filter(e => e.id !== id));
-      setSelected(prev => {
+      setEntries((prev) => prev.filter((e) => e.id !== id));
+      setSelected((prev) => {
         const next = new Set(prev);
         next.delete(id);
         return next;
       });
-      toast.success('File removed from history');
+      toast.success("File removed from history");
     } catch {
-      toast.error('Failed to delete');
+      toast.error("Failed to delete");
     }
   };
 
-  const getOperationType = (fileName: string, fileType: string): 'import' | 'export' => {
+  const getOperationType = (
+    fileName: string,
+    fileType: string,
+  ): "import" | "export" => {
     const lowerFileName = fileName.toLowerCase();
     const lowerFileType = fileType.toLowerCase();
-    
+
     // Export files are typically CSV and have export-related naming patterns
-    if (lowerFileType.includes('csv') && 
-        (lowerFileName.includes('export') || 
-         lowerFileName.includes('download') || 
-         lowerFileName.includes('output') ||
-         lowerFileName.includes('verification') ||
-         lowerFileName.includes('rc-verification') ||
-         lowerFileName.includes('selected'))) {
-      return 'export';
+    if (
+      lowerFileType.includes("csv") &&
+      (lowerFileName.includes("export") ||
+        lowerFileName.includes("download") ||
+        lowerFileName.includes("output") ||
+        lowerFileName.includes("verification") ||
+        lowerFileName.includes("rc-verification") ||
+        lowerFileName.includes("selected"))
+    ) {
+      return "export";
     }
-    
+
     // Import files are typically Excel or user uploads
-    if (lowerFileType.includes('excel') || 
-        lowerFileType.includes('spreadsheet') ||
-        lowerFileName.includes('.xlsx') || 
-        lowerFileName.includes('.xls')) {
-      return 'import';
+    if (
+      lowerFileType.includes("excel") ||
+      lowerFileType.includes("spreadsheet") ||
+      lowerFileName.includes(".xlsx") ||
+      lowerFileName.includes(".xls")
+    ) {
+      return "import";
     }
-    
+
     // Default to import for user uploads
-    return 'import';
+    return "import";
   };
 
   const getFileTypeIcon = (fileType: string, fileName: string) => {
     const lowerFileType = fileType.toLowerCase();
     const lowerFileName = fileName.toLowerCase();
-    
-    if (lowerFileType.includes('csv') || lowerFileName.includes('.csv')) {
+
+    if (lowerFileType.includes("csv") || lowerFileName.includes(".csv")) {
       return <FileText className="w-4 h-4 text-green-600 shrink-0" />;
-    } else if (lowerFileType.includes('excel') || lowerFileType.includes('spreadsheet') || 
-               lowerFileName.includes('.xlsx') || lowerFileName.includes('.xls')) {
+    } else if (
+      lowerFileType.includes("excel") ||
+      lowerFileType.includes("spreadsheet") ||
+      lowerFileName.includes(".xlsx") ||
+      lowerFileName.includes(".xls")
+    ) {
       return <FileSpreadsheet className="w-4 h-4 text-blue-600 shrink-0" />;
     } else {
       return <FileText className="w-4 h-4 text-gray-600 shrink-0" />;
@@ -133,12 +154,12 @@ export function FileHistory({ refreshTrigger }: FileHistoryProps) {
 
   const formatDate = (iso: string) => {
     const d = new Date(iso);
-    return d.toLocaleDateString('en-IN', {
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
+    return d.toLocaleDateString("en-IN", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
     });
   };
 
@@ -152,13 +173,22 @@ export function FileHistory({ refreshTrigger }: FileHistoryProps) {
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-3">
             <History className="w-5 h-5 text-primary" />
-            <h3 className="text-lg font-semibold text-foreground">Processed File History</h3>
+            <h3 className="text-lg font-semibold text-foreground">
+              Processed File History
+            </h3>
             {entries.length > 0 && (
-              <Badge variant="secondary" className="text-xs">{entries.length}</Badge>
+              <Badge variant="secondary" className="text-xs">
+                {entries.length}
+              </Badge>
             )}
           </div>
           {selected.size > 0 && (
-            <Button size="sm" variant="outline" onClick={handleDownloadSelected} className="gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={handleDownloadSelected}
+              className="gap-2"
+            >
               <FileDown className="w-4 h-4" />
               Download {selected.size} selected
             </Button>
@@ -166,7 +196,9 @@ export function FileHistory({ refreshTrigger }: FileHistoryProps) {
         </div>
 
         {loading ? (
-          <div className="text-sm text-muted-foreground py-4 text-center">Loading history...</div>
+          <div className="text-sm text-muted-foreground py-4 text-center">
+            Loading history...
+          </div>
         ) : entries.length === 0 ? (
           <div className="text-sm text-muted-foreground py-8 text-center">
             No file history yet. Upload or export files to see them here.
@@ -190,7 +222,7 @@ export function FileHistory({ refreshTrigger }: FileHistoryProps) {
 
             <div className="max-h-64 overflow-y-auto">
               <AnimatePresence>
-                {entries.map(entry => (
+                {entries.map((entry) => (
                   <motion.div
                     key={entry.id}
                     initial={{ opacity: 0, x: -10 }}
@@ -205,10 +237,15 @@ export function FileHistory({ refreshTrigger }: FileHistoryProps) {
                     />
                     <div className="flex items-center gap-2 flex-1 min-w-0">
                       {getFileTypeIcon(entry.file_type, entry.same_file_name)}
-                      <span className="text-sm text-foreground truncate">{entry.same_file_name}</span>
+                      <span className="text-sm text-foreground truncate">
+                        {entry.same_file_name}
+                      </span>
                     </div>
                     <div className="w-20 text-center">
-                      {getOperationType(entry.same_file_name, entry.file_type) === 'export' ? (
+                      {getOperationType(
+                        entry.same_file_name,
+                        entry.file_type,
+                      ) === "export" ? (
                         <div className="inline-flex items-center rounded-full border px-2.5 py-0.5 font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 border-transparent bg-secondary text-secondary-foreground hover:bg-secondary/80 text-xs">
                           Export
                         </div>
@@ -218,9 +255,15 @@ export function FileHistory({ refreshTrigger }: FileHistoryProps) {
                         </Badge>
                       )}
                     </div>
-                    <span className="w-16 text-right text-sm text-muted-foreground">{entry.record_count}</span>
-                    <span className="w-16 text-right text-sm text-muted-foreground">{formatFileSize(entry.size_bytes)}</span>
-                    <span className="w-36 text-right text-xs text-muted-foreground">{formatDate(entry.created_at)}</span>
+                    <span className="w-16 text-right text-sm text-muted-foreground">
+                      {entry.record_count}
+                    </span>
+                    <span className="w-16 text-right text-sm text-muted-foreground">
+                      {formatFileSize(entry.size_bytes)}
+                    </span>
+                    <span className="w-36 text-right text-xs text-muted-foreground">
+                      {formatDate(entry.created_at)}
+                    </span>
                     <div className="w-20 flex justify-end gap-1">
                       <Button
                         variant="ghost"

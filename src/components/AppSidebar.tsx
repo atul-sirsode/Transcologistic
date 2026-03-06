@@ -9,6 +9,7 @@ import {
   Upload,
   FileBarChart,
   Wallet,
+  History,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 
@@ -32,6 +33,12 @@ const menuItems = [
   },
   { id: "fast-tag", label: "Fast Tag", icon: CreditCard, path: "/fast-tag" },
   {
+    id: "fast-tag-history",
+    label: "FastTag History",
+    icon: History,
+    path: "/fast-tag-history",
+  },
+  {
     id: "fast-tag-upload",
     label: "FastTag Upload",
     icon: Upload,
@@ -43,6 +50,7 @@ const menuItems = [
     icon: FileBarChart,
     path: "/fast-tag-reports",
   },
+
   {
     id: "manage-subscription",
     label: "Manage Subscription",
@@ -132,6 +140,7 @@ export function AppSidebar({
           "user-master",
           "access-master",
           "settings",
+          "manage-subscription",
         ]);
       } finally {
         setLoading(false);
@@ -145,11 +154,13 @@ export function AppSidebar({
     (item) =>
       item.id !== "settings" &&
       item.id !== "user-master" &&
+      item.id !== "access-master" &&
+      item.id !== "manage-subscription" &&
       (alwaysVisibleIds.includes(item.id) || allowedMenus.includes(item.id)),
   );
   const adminMenus = menuItems.filter(
     (item) =>
-      item.id === "access-master" &&
+      (item.id === "access-master" || item.id === "manage-subscription") &&
       (alwaysVisibleIds.includes(item.id) || allowedMenus.includes(item.id)),
   );
   const settingsMenu = menuItems.find((item) => item.id === "settings");

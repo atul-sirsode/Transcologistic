@@ -3,17 +3,35 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { AlertTriangle, X } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { subscriptionService } from "@/services/subscription-service";
+import { useSubscriptionCheck } from "@/lib/subscription-middleware";
 import type { Subscription } from "@/models/subscription";
 
 export function SubscriptionBanner() {
   const { username } = useAuth();
   const [sub, setSub] = useState<Subscription | null>(null);
   const [dismissed, setDismissed] = useState(false);
+  const { checkSubscription } = useSubscriptionCheck();
 
   useEffect(() => {
-    if (!username) return;
-    subscriptionService.getSubscription(username).then(setSub);
-  }, [username]);
+    if (!username) {
+      console.log("SubscriptionBanner: No username available");
+      return;
+    }
+
+    // Use subscription middleware to check status
+    checkSubscription()
+      .then((result) => {
+        if (result.subscription) {
+          setSub(result.subscription);
+        }
+      })
+      .catch((error) => {
+        console.error(
+          "SubscriptionBanner: Error fetching subscription:",
+          error,
+        );
+      });
+  }, [username, checkSubscription]);
 
   if (!sub || dismissed) return null;
 

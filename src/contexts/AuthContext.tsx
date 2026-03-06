@@ -12,6 +12,7 @@ import {
   clearAuthData,
   initializeAuthFromURL,
 } from "@/utils/auth-utils";
+import { clearPermissionsCache } from "@/lib/user-security-api";
 
 export interface UserData {
   user_id: number;
@@ -131,6 +132,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Clear additional user data
     sessionStorage.removeItem("userId");
     sessionStorage.removeItem("userData");
+
+    // Clear permissions cache to prevent stale data on next login
+    clearPermissionsCache();
 
     setIsAuthenticated(false);
     setUsername(null);

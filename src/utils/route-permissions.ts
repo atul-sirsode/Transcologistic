@@ -5,7 +5,7 @@ export const ROUTE_PERMISSIONS = {
   "/user-master": "user-master",
   "/access-master": "access-master",
   "/settings": "settings",
-
+  "/fast-tag-history": "fast-tag-history",
   "/fast-tag-upload": "fast-tag-upload",
   "/fast-tag-reports": "fast-tag-reports",
   "/manage-subscription": "manage-subscription",

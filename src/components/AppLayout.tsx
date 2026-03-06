@@ -8,6 +8,9 @@ import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useNavigate } from "react-router-dom";
 import { SubscriptionBanner } from "@/components/SubscriptionBanner";
+import { SubscriptionProtection } from "@/components/SubscriptionProtection";
+import { CountdownProvider } from "@/contexts/CountdownContext";
+import { CountdownTimer } from "@/components/CountdownTimer";
 import { AppFooter } from "@/components/AppFooter";
 import { useTheme } from "@/components/ThemeProvider";
 import { Sun, Moon } from "lucide-react";
@@ -160,8 +163,13 @@ export function AppLayout({
 
         {/* Main Content */}
         <main className="flex-1 p-3 md:p-6 overflow-auto min-w-0">
-          <SubscriptionBanner />
-          <div className="w-full max-w-full">{children}</div>
+          <CountdownProvider>
+            <CountdownTimer />
+            <SubscriptionBanner />
+            <SubscriptionProtection>
+              <div className="w-full max-w-full">{children}</div>
+            </SubscriptionProtection>
+          </CountdownProvider>
         </main>
         <AppFooter />
       </div>
