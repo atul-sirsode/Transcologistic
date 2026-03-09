@@ -4,14 +4,14 @@ import { banksApi, type Bank } from "@/lib/banks-api";
 import { SearchableSelect } from "@/components/SearchableSelect";
 
 interface BankSelectProps {
-  value: string;
+  value?: string;
   onValueChange: (value: string) => void;
   placeholder?: string;
   disabled?: boolean;
 }
 
 export function BankSelect({
-  value,
+  value = "ALL",
   onValueChange,
   placeholder = "Search & select bank",
   disabled,
@@ -28,11 +28,13 @@ export function BankSelect({
   }, []);
 
   const options = useMemo(
-    () =>
-      banks.map((b) => ({
+    () => [
+      { value: "ALL", label: "All Banks" },
+      ...banks.map((b) => ({
         value: b.code,
         label: `${b.bank_name} (${b.code})`,
       })),
+    ],
     [banks],
   );
 

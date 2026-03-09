@@ -9,15 +9,6 @@ export function CountdownTimer() {
   const [isCompleted, setIsCompleted] = useState(false);
   const [wasActive, setWasActive] = useState(false);
 
-  console.log("CountdownTimer: State:", {
-    isActive,
-    seconds,
-    message,
-    timeLeft,
-    isCompleted,
-    wasActive,
-  });
-
   // Reset states when countdown is reset
   useEffect(() => {
     if (!isActive && seconds === 0 && message === "") {

@@ -47,15 +47,9 @@ export function SubscriptionProtection({
         if (result.isExpired) {
           setIsValid(false);
           // The middleware will handle the countdown and delayed logout
-          console.log(
-            "SubscriptionProtection: Subscription expired, countdown should start",
-          );
         } else {
           setIsValid(true);
           // Stop any active countdown when subscription is valid
-          console.log(
-            "SubscriptionProtection: Subscription valid, stopping countdown",
-          );
           resetCountdown();
         }
       } catch (error) {
