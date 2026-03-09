@@ -9,7 +9,9 @@ interface CountdownContextType {
   resetCountdown: () => void;
 }
 
-const CountdownContext = createContext<CountdownContextType | undefined>(undefined);
+const CountdownContext = createContext<CountdownContextType | undefined>(
+  undefined,
+);
 
 interface CountdownProviderProps {
   children: ReactNode;
@@ -20,7 +22,10 @@ export function CountdownProvider({ children }: CountdownProviderProps) {
   const [seconds, setSeconds] = useState(0);
   const [message, setMessage] = useState("");
 
-  const startCountdown = (newSeconds: number, newMessage = "Your session will expire") => {
+  const startCountdown = (
+    newSeconds: number,
+    newMessage = "Your session will expire",
+  ) => {
     setSeconds(newSeconds);
     setMessage(newMessage);
     setIsActive(true);

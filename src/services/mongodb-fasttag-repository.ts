@@ -42,6 +42,7 @@ export interface IMongoFastTagRepository {
   ): Promise<MongoFastTagDocument>;
   getByFormTypeAndDateRange(
     formType: string,
+    vehicleNumber: string,
     startDate: string,
     endDate: string,
     page: number,
@@ -195,13 +196,14 @@ export class MongoFastTagRepository implements IMongoFastTagRepository {
 
   async getByFormTypeAndDateRange(
     formType: string,
+    vehicleNumber: string,
     startDate: string,
     endDate: string,
     page: number = 1,
     limit: number = 10,
   ): Promise<MongoFastTagPaginatedResponse> {
     const raw = await apiFetch<RawPaginatedResponse>(
-      `${this.basePath}/formType/${formType}/daterange?startDate=${startDate}&endDate=${endDate}&page=${page}&limit=${limit}`,
+      `${this.basePath}/formType/${formType}/daterange?startDate=${startDate}&endDate=${endDate}&vehicleNumber=${vehicleNumber}&page=${page}&limit=${limit}`,
     );
 
     return {

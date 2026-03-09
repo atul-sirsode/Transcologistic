@@ -2,13 +2,17 @@ import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import {
   Settings as SettingsIcon,
+  Building2,
   Plus,
   Trash2,
-  Loader2,
   ArrowLeft,
+  Database,
+  IndianRupee,
+  Loader2,
 } from "lucide-react";
 import { AppLayout } from "@/components/AppLayout";
 import { banksApi, Bank } from "@/lib/banks-api";
+import { autoAdjustAmountService } from "@/lib/auto-adjust-amount-service";
 import {
   Card,
   CardContent,
@@ -28,9 +32,63 @@ export default function Settings() {
   const [banks, setBanks] = useState<Bank[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isAdding, setIsAdding] = useState(false);
+  const [isLoadingAutoAdjust, setIsLoadingAutoAdjust] = useState(false);
   const { toast } = useToast();
   const [newBankName, setNewBankName] = useState("");
+  const [autoAdjustAmount, setAutoAdjustAmount] = useState("");
+  const [autoAdjustError, setAutoAdjustError] = useState("");
 
+  const handleAutoAdjustSave = async () => {
+    // Validate amount using service
+    const validation = autoAdjustAmountService.validateAmount(autoAdjustAmount);
+    if (!validation.isValid) {
+      setAutoAdjustError(validation.error || "Invalid amount");
+      return;
+    }
+
+    setIsLoadingAutoAdjust(true);
+    setAutoAdjustError("");
+
+    try {
+      const success = await autoAdjustAmountService.updateAmount(
+        Number(autoAdjustAmount),
+      );
+
+      console.log("success", success);
+      if (success) {
+        toast({ title: "Auto Adjust Amount saved successfully" });
+      } else {
+        setAutoAdjustError("Failed to save amount. Please try again.");
+        toast({
+          title: "Failed to save",
+          description: "Could not update auto adjust amount",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error("Save auto adjust amount error:", error);
+      setAutoAdjustError("Failed to save amount. Please try again.");
+      toast({
+        title: "Error",
+        description:
+          error instanceof Error ? error.message : "Unknown error occurred",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoadingAutoAdjust(false);
+    }
+  };
+
+  const loadAutoAdjustAmount = async () => {
+    try {
+      const data = await autoAdjustAmountService.getAmount();
+      if (data) {
+        setAutoAdjustAmount(data.amount.toString());
+      }
+    } catch (error) {
+      console.error("Failed to load auto adjust amount:", error);
+    }
+  };
   const loadBanks = async () => {
     setIsLoading(true);
     try {
@@ -49,6 +107,7 @@ export default function Settings() {
 
   useEffect(() => {
     loadBanks();
+    loadAutoAdjustAmount();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -135,7 +194,51 @@ export default function Settings() {
             Exit
           </Button>
         </motion.div>
-
+        {/* Auto Adjust Amount */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <IndianRupee className="w-4 h-4" /> Auto Adjust Amount
+            </CardTitle>
+            <CardDescription>
+              Set the auto adjust amount (must be greater than 2000)
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex gap-3 items-end">
+              <div className="flex-1 space-y-1">
+                <Label>Amount</Label>
+                <Input
+                  type="number"
+                  min={2001}
+                  value={autoAdjustAmount}
+                  onChange={(e) => {
+                    setAutoAdjustAmount(e.target.value);
+                    setAutoAdjustError("");
+                  }}
+                  placeholder="e.g. 5000"
+                />
+                {autoAdjustError && (
+                  <p className="text-sm text-destructive">{autoAdjustError}</p>
+                )}
+              </div>
+              <Button
+                variant="outline"
+                onClick={handleAutoAdjustSave}
+                disabled={isLoadingAutoAdjust}
+              >
+                {isLoadingAutoAdjust ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                    Saving...
+                  </>
+                ) : (
+                  "Save"
+                )}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
         <div className="space-y-4">
           {/* Add Bank */}
           <Card>

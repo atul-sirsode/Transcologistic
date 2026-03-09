@@ -134,7 +134,7 @@ export function toUtcIsoShortFromFormatted(
 }
 
 // Convert "M/D/YYYY, h:mm:ss AM/PM" to ISO-8601 format for datetime-local input
-function formatForDatetimeLocal(
+export function formatForDatetimeLocal(
   formattedDateTime: string | null | undefined,
 ): string | null {
   if (!formattedDateTime) return null;
@@ -181,7 +181,7 @@ function extractTimeInIst(
   return timePart || null;
 }
 
-function addMinutesKeepFormat(input, minutesToAdd = 1) {
+export function addMinutesKeepFormat(input, minutesToAdd = 1) {
   // Input format: M/D/YYYY, h:mm:ss AM/PM
   const [datePart, timePart] = input.split(", ").map((s) => s.trim());
 

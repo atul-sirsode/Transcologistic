@@ -45,6 +45,7 @@ export interface FastTagHistoryData {
   closing_balance: number;
   description?: string;
   txn_id?: string;
+  bankName?: string;
 }
 
 export interface FastTagHistoryRecord extends FastTagHistoryData {

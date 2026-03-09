@@ -29,12 +29,13 @@ export class FastTagReportService {
     currentPage: number;
   }> {
     const formType = BANK_FORM_TYPE_MAP[filter.bankId] || filter.bankId;
-
+    const vehicleNumber = filter.vehicleNumber.trim().toUpperCase();
     const startStr = `${filter.startDate.getFullYear()}-${String(filter.startDate.getMonth() + 1).padStart(2, "0")}-${String(filter.startDate.getDate()).padStart(2, "0")}`;
     const endStr = `${filter.endDate.getFullYear()}-${String(filter.endDate.getMonth() + 1).padStart(2, "0")}-${String(filter.endDate.getDate()).padStart(2, "0")}`;
 
     const raw = await mongoFastTagRepo.getByFormTypeAndDateRange(
       formType,
+      vehicleNumber,
       startStr,
       endStr,
       page,
@@ -43,6 +44,7 @@ export class FastTagReportService {
 
     const rows: FastTagReportRow[] = raw.data.map((doc) => ({
       session: {
+        formType: doc.formType,
         id: doc._id,
         bank_id: doc.bank || "",
         bank_name: doc.bank || "",

@@ -8,6 +8,7 @@ export interface FastTagReportFilter {
   bankName: string;
   startDate: Date;
   endDate: Date;
+  vehicleNumber: string;
 }
 
 export interface FastTagReportSession {
@@ -23,6 +24,7 @@ export interface FastTagReportSession {
   start_date: string | null;
   end_date: string | null;
   created_at: string;
+  formType: string;
 }
 
 export interface FastTagReportTransaction {

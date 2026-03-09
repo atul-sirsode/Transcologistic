@@ -41,6 +41,7 @@ interface HistoryRecord {
   closingBalance: string;
   description: string;
   txnId: string;
+  bankName: string;
 }
 
 export default function FastTagHistory() {
@@ -86,6 +87,7 @@ export default function FastTagHistory() {
 
       const mapped: HistoryRecord[] = result.history.map((h) => ({
         id: h.id,
+        bankName: h.bankName,
         sessionId: result.session.id,
         transactionTime: h.transaction_time
           ? format(new Date(h.transaction_time), "dd MMM yy, hh:mm a")
@@ -258,6 +260,9 @@ export default function FastTagHistory() {
                         <TableHeader>
                           <TableRow className="bg-muted/50">
                             <TableHead className="text-xs font-semibold whitespace-nowrap">
+                              Bank Name
+                            </TableHead>
+                            <TableHead className="text-xs font-semibold whitespace-nowrap">
                               Transaction Time
                             </TableHead>
                             <TableHead className="text-xs font-semibold whitespace-nowrap">
@@ -283,6 +288,9 @@ export default function FastTagHistory() {
                         <TableBody>
                           {filteredHistory.map((row) => (
                             <TableRow key={row.id}>
+                              <TableCell className="text-sm whitespace-nowrap font-medium">
+                                {row.bankName}
+                              </TableCell>
                               <TableCell className="text-sm whitespace-nowrap">
                                 {row.transactionTime}
                               </TableCell>

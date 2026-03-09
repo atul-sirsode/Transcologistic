@@ -45,8 +45,93 @@ import {
 } from "@/components/ui/tooltip";
 import { toast } from "@/hooks/use-toast";
 import { getEnabledBanks } from "@/lib/admin-settings";
+import { fastTagService, type TollRecord } from "@/services/fasttag-service";
+import { fastTagRepo, type FastTagSessionRecord } from "@/lib/db";
+import { mongoFastTagRepo } from "@/services/mongodb-fasttag-repository";
+import { banksApi } from "@/lib/banks-api";
+import type { MongoFastTagFilter } from "@/models/mongodb-fasttag";
 import * as XLSX from "xlsx";
 import Papa from "papaparse";
+
+const MAX_FILE_SIZE = 2 * 1024 * 1024; // 2MB in bytes
+
+// Function to format date to IST 12-hour format
+function formatDateTimeToIST(dateString: string): string {
+  if (!dateString) return "";
+
+  try {
+    let date: Date;
+
+    // Handle Excel serial date format (numbers like 46176.333333333336)
+    if (!isNaN(Number(dateString)) && Number(dateString) > 25569) {
+      const excelDate = Number(dateString);
+      // Excel dates are stored as days since 1/1/1900
+      // Convert to milliseconds since Unix epoch (1/1/1970)
+      const adjustedExcelDate = excelDate - 25569; // 25569 = 1/1/1970 in Excel serial
+      const utcDate = new Date(adjustedExcelDate * 86400 * 1000);
+
+      // Extract UTC components to avoid timezone conversion
+      const year = utcDate.getUTCFullYear();
+      const month = utcDate.getUTCMonth();
+      const day = utcDate.getUTCDate();
+      const hours = utcDate.getUTCHours();
+      const minutes = utcDate.getUTCMinutes();
+      const seconds = utcDate.getUTCSeconds();
+
+      // Create a new date using local timezone with the UTC components
+      date = new Date(year, month, day, hours, minutes, seconds);
+    } else {
+      // Handle various Excel date string formats
+      // Try to parse Excel format like "6/3/2026  8:00:00 AM"
+      const excelFormatMatch = dateString.match(
+        /^(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(\d{1,2}):(\d{2}):(\d{2})\s+(AM|PM)$/i,
+      );
+      if (excelFormatMatch) {
+        const [, month, day, year, hours, minutes, seconds, ampm] =
+          excelFormatMatch;
+        let hour24 = parseInt(hours);
+        if (ampm.toUpperCase() === "PM" && hour24 !== 12) {
+          hour24 += 12;
+        } else if (ampm.toUpperCase() === "AM" && hour24 === 12) {
+          hour24 = 0;
+        }
+
+        // Create date assuming it's already in IST (no timezone conversion)
+        date = new Date(
+          parseInt(year),
+          parseInt(month) - 1,
+          parseInt(day),
+          hour24,
+          parseInt(minutes),
+          parseInt(seconds),
+        );
+      } else {
+        // Try parsing as regular date string
+        date = new Date(dateString);
+      }
+    }
+
+    // Check if date is valid
+    if (isNaN(date.getTime())) {
+      return dateString; // Return original if parsing fails
+    }
+
+    // Format to 12-hour format
+    const options: Intl.DateTimeFormatOptions = {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: true,
+      hourCycle: "h12",
+    };
+
+    return date.toLocaleString("en-IN", options);
+  } catch (error) {
+    return dateString; // Return original if formatting fails
+  }
+}
 
 const REQUIRED_COLUMNS = [
   "rc_number",
@@ -57,6 +142,8 @@ const REQUIRED_COLUMNS = [
   "destination_city",
   "opening_amount",
   "start_date",
+  "start_time",
+  "vehicle_type",
 ];
 
 const COLUMN_LABELS: Record<string, string> = {
@@ -68,6 +155,8 @@ const COLUMN_LABELS: Record<string, string> = {
   destination_city: "Destination City",
   opening_amount: "Opening Amount",
   start_date: "Start DateTime",
+  start_time: "Start Time",
+  vehicle_type: "Vehicle Type",
 };
 
 interface UploadedRow {
@@ -83,16 +172,6 @@ interface ProcessedRow {
   _selected: boolean;
   _id: string;
   _tollHistory?: TollRecord[];
-}
-
-interface TollRecord {
-  tollName: string;
-  amount: string;
-  processingTime: string;
-  transactionTime: string;
-  nature: "Debit" | "Credit";
-  closingBalance: string;
-  txnId: string;
 }
 
 interface ValidationResult {
@@ -169,6 +248,22 @@ function findColumn(headers: string[], target: string): string | null {
       "date_time",
       "datetime",
     ],
+    start_time: [
+      "start_time",
+      "starttime",
+      "time",
+      "start_time_only",
+      "starttimeonly",
+      "from_time",
+      "fromtime",
+    ],
+    vehicle_type: [
+      "vehicle_type",
+      "vehicletype",
+      "vehicle",
+      "type",
+      "vehicletypecode",
+    ],
   };
   const targetAliases = aliases[target] || [target];
   for (const header of headers) {
@@ -202,8 +297,39 @@ function validateFile(
   const rows: UploadedRow[] = data.map((row) => {
     const mapped: UploadedRow = {};
     for (const [key, originalHeader] of Object.entries(mappedColumns)) {
-      mapped[key] = String(row[originalHeader] || "").trim();
+      const value = String(row[originalHeader] || "").trim();
+      mapped[key] = value;
     }
+
+    // Combine start_date and start_time to create valid datetime
+    if (mapped.start_date && mapped.start_time) {
+      const dateStr = mapped.start_date;
+      const timeStr = mapped.start_time;
+
+      // Try to create a valid datetime by combining date and time
+      try {
+        const dateTimeStr = `${dateStr} ${timeStr}`;
+        const parsedDate = new Date(dateTimeStr);
+
+        // If the combined date is valid, format it to IST for start_date only
+        if (!isNaN(parsedDate.getTime())) {
+          mapped.start_date = formatDateTimeToIST(parsedDate.toISOString());
+          // Keep the original start_time from Excel as-is
+          // mapped.start_time = timeStr; // Already set from original
+        } else {
+          // If invalid, keep original date and let validation handle it
+          mapped.start_date = formatDateTimeToIST(dateStr);
+        }
+      } catch (error) {
+        console.error("Error parsing date and time:", error);
+        // If parsing fails, format just the date
+        mapped.start_date = formatDateTimeToIST(dateStr);
+      }
+    } else if (mapped.start_date) {
+      // If only date is provided, format it
+      mapped.start_date = formatDateTimeToIST(mapped.start_date);
+    }
+
     return mapped;
   });
 
@@ -217,6 +343,10 @@ function validateFile(
       rowErrors.push(`Row ${idx + 1}: Destination State is empty`);
     if (!row.opening_amount || isNaN(Number(row.opening_amount)))
       rowErrors.push(`Row ${idx + 1}: Opening Amount is invalid`);
+    if (!row.start_date) rowErrors.push(`Row ${idx + 1}: Start Date is empty`);
+    if (!row.start_time) rowErrors.push(`Row ${idx + 1}: Start Time is empty`);
+    if (!row.vehicle_type)
+      rowErrors.push(`Row ${idx + 1}: Vehicle Type is empty`);
   });
 
   if (rowErrors.length > 0 && rowErrors.length <= 5) {
@@ -238,48 +368,132 @@ function validateFile(
 const INSUFFICIENT_BALANCE_REASON =
   "Due to insufficient balance this record not processed, please add amount to reProcess";
 
-// Mock toll history generation - returns { records, insufficientBalance }
-function generateMockTollHistory(row: UploadedRow): {
-  records: TollRecord[];
-  insufficientBalance: boolean;
-} {
-  const tolls = [
-    "Sarandi Toll Plaza",
-    "Mandamarri Toll Plaza",
-    "Basanthnagar Toll",
-    "Singarajupally Toll",
-    "Yerkaram Toll",
-    "Chillakallu Toll",
-    "Keesara Fee Plaza",
-  ];
-  const count = 3 + Math.floor(Math.random() * 4);
-  let balance = Number(row.opening_amount) || 1000;
-  const records: TollRecord[] = [];
-  for (let i = 0; i < count; i++) {
-    const amt = [45, 70, 76, 90, 110][Math.floor(Math.random() * 5)];
-    if (balance - amt < 0) {
-      return { records, insufficientBalance: true };
-    }
-    balance -= amt;
-    records.push({
-      tollName: tolls[Math.floor(Math.random() * tolls.length)],
-      amount: String(amt),
-      processingTime: `${25 - i} Feb 26, ${String(8 + i).padStart(2, "0")}:00 AM`,
-      transactionTime: `${27 - i} Feb 26, ${String(8 + i).padStart(2, "0")}:00 AM`,
-      nature: "Debit",
-      closingBalance: String(balance),
-      txnId: String(800000000000000 + Math.floor(Math.random() * 99999999999)),
+/**
+ * Enhance row data with MongoDB records and bank codes
+ * - Gets existing records from MongoDB by bank and RC number
+ * - Uses record's opening balance if found, otherwise uses row data
+ * - Converts bank name to bank code
+ */
+async function enhanceRowDataWithMongoRecords(
+  rows: Array<{
+    rc_number: string;
+    bank: string;
+    formType: string;
+    source_state: string;
+    source_city: string;
+    destination_state: string;
+    destination_city: string;
+    opening_amount: string;
+    start_date: string;
+    vehicle_type: string;
+  }>,
+) {
+  try {
+    // Get all banks for code mapping
+    const banks = await banksApi.list();
+    const bankNameToCodeMap = new Map(
+      banks.map((bank) => [bank.bank_name.toLowerCase(), bank.code]),
+    );
+
+    // Get MongoDB sessions with filters for each row
+    const uniqueFilters = new Map<string, MongoFastTagFilter>();
+
+    rows.forEach((row) => {
+      const bankCode = bankNameToCodeMap.get(row.bank.toLowerCase());
+      if (bankCode) {
+        const filterKey = `${row.rc_number.toLowerCase()}_${bankCode}`;
+        if (!uniqueFilters.has(filterKey)) {
+          uniqueFilters.set(filterKey, {
+            vehicleNumber: row.rc_number.toLowerCase(),
+            formType: bankCode,
+          });
+        }
+      }
     });
-    if (balance === 0) {
-      return { records, insufficientBalance: true };
+
+    // Get all matching sessions using the MongoDB repository directly
+    const allSessions: FastTagSessionRecord[] = [];
+    for (const filter of uniqueFilters.values()) {
+      const docs = await mongoFastTagRepo.getAll(filter);
+      // Convert MongoDB docs to session records using the same logic as fastTagRepo
+
+      const sessions = docs.map(
+        (doc) =>
+          ({
+            formType: doc.formType,
+            id: doc._id,
+            bank_id: doc.bank || "",
+            bank_name: doc.bank || "",
+            vehicle_number: doc.vehicleNumber,
+            customer_name: doc.ownerName,
+            customer_mobile: doc.mobile,
+            truck_number: doc.carModel,
+            truck_owner_name: doc.ownerName,
+            opening_balance: doc.openingBalance,
+            start_date: doc.createdAt,
+            end_date: doc.updatedAt,
+            created_at: doc.createdAt,
+            updated_at: doc.updatedAt,
+            pdf_url: undefined,
+          }) as FastTagSessionRecord,
+      );
+      allSessions.push(...sessions);
     }
+
+    // Create a map for quick lookup by vehicle number and bank
+    const sessionMap = new Map<string, FastTagSessionRecord>();
+    allSessions.forEach((session) => {
+      const key = `${session.vehicle_number.toLowerCase()}_${session.formType.toLowerCase()}`;
+      sessionMap.set(key, session);
+    });
+
+    // Enhance each row
+    return rows.map((row) => {
+      // Set formType based on bank name mapping
+      const formType =
+        bankNameToCodeMap.get(row.bank.toLowerCase()) || row.bank;
+
+      const vehicleKey = `${row.rc_number.toLowerCase()}_${formType.toLowerCase()}`;
+      const existingSession = sessionMap.get(vehicleKey);
+
+      // Use opening balance from MongoDB if record exists, otherwise use row data
+      const openingAmount = existingSession
+        ? existingSession.opening_balance.toString()
+        : row.opening_amount;
+
+      // Convert bank name to bank code
+      const bankCode = formType;
+
+      return {
+        ...row,
+        formType: formType, // Set the correct formType
+        opening_amount: openingAmount,
+        bank_code: bankCode,
+        has_existing_record: !!existingSession,
+      };
+    });
+  } catch (error) {
+    console.error("Error enhancing row data:", error);
+    // Return original data if enhancement fails
+    return rows.map((row) => ({
+      ...row,
+      bank_code: row.bank,
+      has_existing_record: false,
+    }));
   }
-  return { records, insufficientBalance: false };
 }
 
 function downloadDummyExcel() {
   const banks = getEnabledBanks();
   const bankName = banks.length > 0 ? banks[0].name : "ICICI Bank";
+
+  // Get current IST time for realistic dates
+  const now = new Date();
+  const istOffset = 5.5 * 60 * 60 * 1000;
+  const istNow = new Date(
+    now.getTime() + istOffset + now.getTimezoneOffset() * 60 * 1000,
+  );
+
   const dummyData = [
     {
       RC_Number: "TS09UB1234",
@@ -289,7 +503,10 @@ function downloadDummyExcel() {
       Destination_State: "Maharashtra",
       Destination_City: "Mumbai",
       Opening_Amount: "1000",
-      Start_DateTime: "01-02-2026 08:00 AM",
+      Start_Date: formatDateTimeToIST(istNow.toISOString()).split(",")[0],
+      Start_Time:
+        formatDateTimeToIST(istNow.toISOString()).split(",")[1] || "10:30 AM",
+      Vehicle_Type: "2AxlesAuto",
     },
     {
       RC_Number: "MH12AB5678",
@@ -299,7 +516,14 @@ function downloadDummyExcel() {
       Destination_State: "Karnataka",
       Destination_City: "Bangalore",
       Opening_Amount: "1500",
-      Start_DateTime: "01-02-2026 10:30 AM",
+      Start_Date: formatDateTimeToIST(
+        new Date(istNow.getTime() + 2.5 * 60 * 60 * 1000).toISOString(),
+      ).split(",")[0],
+      Start_Time:
+        formatDateTimeToIST(
+          new Date(istNow.getTime() + 2.5 * 60 * 60 * 1000).toISOString(),
+        ).split(",")[1] || "1:00 PM",
+      Vehicle_Type: "2AxlesAuto",
     },
     {
       RC_Number: "KA01CD9012",
@@ -309,7 +533,14 @@ function downloadDummyExcel() {
       Destination_State: "Tamil Nadu",
       Destination_City: "Chennai",
       Opening_Amount: "800",
-      Start_DateTime: "01-02-2026 02:15 PM",
+      Start_Date: formatDateTimeToIST(
+        new Date(istNow.getTime() + 6.25 * 60 * 60 * 1000).toISOString(),
+      ).split(",")[0],
+      Start_Time:
+        formatDateTimeToIST(
+          new Date(istNow.getTime() + 6.25 * 60 * 60 * 1000).toISOString(),
+        ).split(",")[1] || "4:45 PM",
+      Vehicle_Type: "2AxlesAuto",
     },
   ];
   const ws = XLSX.utils.json_to_sheet(dummyData);
@@ -334,8 +565,65 @@ export default function FastTagUpload() {
   const [editingRow, setEditingRow] = useState<ProcessedRow | null>(null);
   const [editAmount, setEditAmount] = useState("");
   const [editDescription, setEditDescription] = useState("");
+  const [tollDetailsDialogOpen, setTollDetailsDialogOpen] = useState(false);
+  const [selectedTollHistory, setSelectedTollHistory] = useState<TollRecord[]>(
+    [],
+  );
+  const [existingSessionDetails, setExistingSessionDetails] =
+    useState<FastTagSessionRecord | null>(null);
+  const [showExistingDetailsDialog, setShowExistingDetailsDialog] =
+    useState(false);
+
+  // Function to fetch existing session details
+  const fetchExistingSessionDetails = async (
+    rcNumber: string,
+    bankCode: string,
+  ) => {
+    try {
+      const docs = await mongoFastTagRepo.getAll({
+        vehicleNumber: rcNumber.toLowerCase(),
+        formType: bankCode,
+      });
+      if (docs.length > 0) {
+        const doc = docs[0];
+        const session: FastTagSessionRecord = {
+          formType: doc.formType,
+          id: doc._id,
+          bank_id: doc.bank || "",
+          bank_name: doc.bank || "",
+          vehicle_number: doc.vehicleNumber,
+          customer_name: doc.ownerName,
+          customer_mobile: doc.mobile,
+          truck_number: doc.carModel,
+          truck_owner_name: doc.ownerName,
+          opening_balance: doc.openingBalance,
+          start_date: doc.createdAt,
+          end_date: doc.updatedAt,
+          created_at: doc.createdAt,
+          updated_at: doc.updatedAt,
+          pdf_url: undefined,
+        };
+        setExistingSessionDetails(session);
+        return session;
+      }
+    } catch (error) {
+      console.error("Error fetching existing session details:", error);
+    }
+    return null;
+  };
 
   const processFile = useCallback(async (file: File) => {
+    // File size validation - limit to 2MB
+    if (file.size > MAX_FILE_SIZE) {
+      const fileSizeMB = (file.size / (1024 * 1024)).toFixed(2);
+      toast({
+        title: "File too large",
+        description: `File size is ${fileSizeMB}MB. Maximum allowed size is 2MB.`,
+        variant: "destructive",
+      });
+      return;
+    }
+
     const ext = file.name.split(".").pop()?.toLowerCase();
     if (!["csv", "xlsx", "xls"].includes(ext || "")) {
       toast({
@@ -398,14 +686,39 @@ export default function FastTagUpload() {
       e.preventDefault();
       setDragActive(false);
       const file = e.dataTransfer.files[0];
-      if (file) processFile(file);
+      if (file) {
+        // File size validation - limit to 2MB
+        if (file.size > MAX_FILE_SIZE) {
+          const fileSizeMB = (file.size / (1024 * 1024)).toFixed(2);
+          toast({
+            title: "File too large",
+            description: `File size is ${fileSizeMB}MB. Maximum allowed size is 2MB.`,
+            variant: "destructive",
+          });
+          return;
+        }
+        processFile(file);
+      }
     },
     [processFile],
   );
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) processFile(file);
+    if (file) {
+      // File size validation - limit to 2MB
+      if (file.size > MAX_FILE_SIZE) {
+        const fileSizeMB = (file.size / (1024 * 1024)).toFixed(2);
+        toast({
+          title: "File too large",
+          description: `File size is ${fileSizeMB}MB. Maximum allowed size is 2MB.`,
+          variant: "destructive",
+        });
+        e.target.value = "";
+        return;
+      }
+      processFile(file);
+    }
     e.target.value = "";
   };
 
@@ -422,54 +735,84 @@ export default function FastTagUpload() {
     }));
     setProcessedRows(rows);
 
-    // Simulate processing each row
-    const results: ProcessedRow[] = await Promise.all(
-      rows.map(async (row, idx) => {
-        await new Promise((r) => setTimeout(r, 300 + Math.random() * 700));
-        // Check toll history and balance
-        const tollResult = generateMockTollHistory(row.data);
+    try {
+      // Enhance row data with MongoDB records and bank codes
+      const enhancedRows = await enhanceRowDataWithMongoRecords(
+        validationResult.data.map((row) => ({
+          rc_number: row.rc_number,
+          bank: row.bank,
+          formType: row.formType,
+          source_state: row.source_state,
+          source_city: row.source_city,
+          destination_state: row.destination_state,
+          destination_city: row.destination_city,
+          opening_amount: row.opening_amount,
+          start_date: row.start_date,
+          start_time: row.start_time,
+          vehicle_type: row.vehicle_type,
+        })),
+      );
+
+      // Process rows using the FastTag service
+      const tollResults = await fastTagService.processFastTagRows(enhancedRows);
+
+      // Map results back to ProcessedRow format using enhancedRows instead of original rows
+      const results: ProcessedRow[] = enhancedRows.map((enhancedRow, idx) => {
+        const tollResult = tollResults[idx];
+        const originalRow = rows[idx];
+
+        if (!tollResult.success) {
+          return {
+            ...originalRow,
+            data: enhancedRow as unknown as UploadedRow, // Cast through unknown
+            _status: "failed" as ProcessStatus,
+            _failReason: tollResult.error || "Processing failed",
+            _tollHistory: [],
+          };
+        }
+
         if (tollResult.insufficientBalance) {
           return {
-            ...row,
+            ...originalRow,
+            data: enhancedRow as unknown as UploadedRow, // Cast through unknown
             _status: "failed" as ProcessStatus,
-            _failReason: INSUFFICIENT_BALANCE_REASON,
+            _failReason: tollResult.error || INSUFFICIENT_BALANCE_REASON,
             _tollHistory: tollResult.records,
           };
         }
-        // Simulate ~80% success rate for other reasons
-        const isSuccess = Math.random() > 0.2;
-        if (isSuccess) {
-          return {
-            ...row,
-            _status: "success" as ProcessStatus,
-            _tollHistory: tollResult.records,
-          };
-        } else {
-          const reasons = [
-            "RC Number not found in FASTag database",
-            "Bank service temporarily unavailable",
-            "Invalid route: No toll plazas found",
-            "Vehicle not registered with FASTag",
-          ];
-          return {
-            ...row,
-            _status: "failed" as ProcessStatus,
-            _failReason: reasons[idx % reasons.length],
-          };
-        }
-      }),
-    );
 
-    setProcessedRows(results);
-    setHasProcessed(true);
-    setIsProcessing(false);
+        return {
+          ...originalRow,
+          data: enhancedRow as unknown as UploadedRow, // Cast through unknown
+          _status: "success" as ProcessStatus,
+          _tollHistory: tollResult.records,
+        };
+      });
 
-    const successCount = results.filter((r) => r._status === "success").length;
-    const failCount = results.filter((r) => r._status === "failed").length;
-    toast({
-      title: "Processing Complete",
-      description: `${successCount} success, ${failCount} failed`,
-    });
+      setProcessedRows(results);
+      setHasProcessed(true);
+
+      // Show summary toast
+      const successCount = results.filter(
+        (r) => r._status === "success",
+      ).length;
+      const failedCount = results.filter((r) => r._status === "failed").length;
+
+      toast({
+        title: "Processing Complete",
+        description: `Successfully processed ${successCount} rows. ${failedCount} rows failed.`,
+        variant: failedCount > 0 ? "destructive" : "default",
+      });
+    } catch (error) {
+      console.error("Processing error:", error);
+      toast({
+        title: "Processing Error",
+        description: "An error occurred while processing the toll data.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   const handleRetry = async (ids: string[]) => {
@@ -485,38 +828,66 @@ export default function FastTagUpload() {
       ),
     );
 
-    for (const id of ids) {
-      await new Promise((r) => setTimeout(r, 500 + Math.random() * 500));
+    try {
+      // Get the rows to retry
+      const rowsToRetry = processedRows.filter((r) => ids.includes(r._id));
+
+      // Process them using the FastTag service
+      const tollResults = await fastTagService.processFastTagRows(
+        rowsToRetry.map((row) => ({
+          rc_number: row.data.rc_number,
+          bank: row.data.bank,
+          source_state: row.data.source_state,
+          source_city: row.data.source_city,
+          destination_state: row.data.destination_state,
+          destination_city: row.data.destination_city,
+          opening_amount: row.data.opening_amount,
+          start_date: row.data.start_date,
+          vehicle_type: row.data.vehicle_type,
+        })),
+      );
+
+      // Update the processed rows with new results
       setProcessedRows((prev) =>
         prev.map((r) => {
-          if (r._id !== id) return r;
-          const tollResult = generateMockTollHistory(r.data);
+          const index = ids.indexOf(r._id);
+          if (index === -1) return r;
+
+          const tollResult = tollResults[index];
+
+          if (!tollResult.success) {
+            return {
+              ...r,
+              _status: "failed" as ProcessStatus,
+              _failReason: tollResult.error || "Processing failed",
+              _tollHistory: [],
+            };
+          }
+
           if (tollResult.insufficientBalance) {
             return {
               ...r,
               _status: "failed" as ProcessStatus,
-              _failReason: INSUFFICIENT_BALANCE_REASON,
+              _failReason: tollResult.error || INSUFFICIENT_BALANCE_REASON,
               _tollHistory: tollResult.records,
             };
           }
-          const success = Math.random() > 0.4;
-          if (success) {
-            return {
-              ...r,
-              _status: "success" as ProcessStatus,
-              _failReason: undefined,
-              _tollHistory: tollResult.records,
-            };
-          }
+
           return {
             ...r,
-            _status: "failed" as ProcessStatus,
-            _failReason: "Retry failed: Service unavailable",
+            _status: "success" as ProcessStatus,
+            _tollHistory: tollResult.records,
           };
         }),
       );
+    } catch (error) {
+      console.error("Retry error:", error);
+      toast({
+        title: "Retry Failed",
+        description: "An error occurred during retry processing.",
+        variant: "destructive",
+      });
     }
-    toast({ title: "Retry complete" });
   };
 
   const handleEditRow = (row: ProcessedRow) => {
@@ -524,6 +895,15 @@ export default function FastTagUpload() {
     setEditAmount(row.data.opening_amount || "");
     setEditDescription(row._failReason || "");
     setEditDialogOpen(true);
+  };
+
+  const handleViewTollDetails = (
+    tollHistory: TollRecord[],
+    row: ProcessedRow,
+  ) => {
+    setSelectedTollHistory(tollHistory);
+    setEditingRow(row);
+    setTollDetailsDialogOpen(true);
   };
 
   const handleSaveEdit = async () => {
@@ -738,7 +1118,7 @@ export default function FastTagUpload() {
                     Upload CSV or Excel file
                   </p>
                   <p className="text-sm text-muted-foreground mt-1">
-                    Drag and drop or click to browse
+                    Drag and drop or click to browse (Max 2MB)
                   </p>
                 </div>
                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -786,6 +1166,10 @@ export default function FastTagUpload() {
                   <li className="flex items-start gap-2">
                     <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-primary shrink-0" />
                     Supported formats: CSV, XLSX, XLS
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-primary shrink-0" />
+                    Maximum file size: 2MB
                   </li>
                   <li className="flex items-start gap-2">
                     <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-primary shrink-0" />
@@ -1119,6 +1503,23 @@ export default function FastTagUpload() {
                                   <Pencil className="w-3 h-3" /> Edit
                                 </Button>
                               )}
+                              {row._tollHistory &&
+                                row._tollHistory.length > 0 && (
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="gap-1 h-7 text-xs"
+                                    onClick={() =>
+                                      handleViewTollDetails(
+                                        row._tollHistory!,
+                                        row,
+                                      )
+                                    }
+                                  >
+                                    <FileDown className="w-3 h-3" /> View Toll
+                                    Details
+                                  </Button>
+                                )}
                             </TableCell>
                           </TableRow>
                         ))}
@@ -1183,6 +1584,294 @@ export default function FastTagUpload() {
                 }
               >
                 Save & Re-process
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Toll Details Dialog */}
+        <Dialog
+          open={tollDetailsDialogOpen}
+          onOpenChange={setTollDetailsDialogOpen}
+        >
+          <DialogContent className="sm:max-w-2xl max-h-[80vh] overflow-y-auto">
+            <DialogHeader>
+              <div className="flex justify-between items-center">
+                <DialogTitle>Toll Details</DialogTitle>
+                {editingRow?.data?.has_existing_record && (
+                  <div className="bg-green-50 border border-green-200 rounded-lg p-3 max-w-md">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-2">
+                        <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                        <span className="text-sm font-medium text-green-800">
+                          Existing Vehicle Details Found
+                        </span>
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={async () => {
+                          const session = await fetchExistingSessionDetails(
+                            editingRow.data.rc_number,
+                            editingRow.data.formType,
+                          );
+                          if (session) {
+                            setShowExistingDetailsDialog(true);
+                          }
+                        }}
+                        className="text-xs h-7 px-2"
+                      >
+                        View Details
+                      </Button>
+                    </div>
+                    <div className="mt-2 text-xs text-green-700">
+                      Vehicle: {editingRow.data.rc_number} • Opening Balance: ₹
+                      {editingRow.data.opening_amount}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </DialogHeader>
+            <div className="space-y-4 py-2">
+              {selectedTollHistory.length > 0 ? (
+                <div className="rounded-lg border border-border overflow-hidden">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="bg-muted/50">
+                        <TableHead className="text-xs font-semibold">
+                          Toll Name
+                        </TableHead>
+                        <TableHead className="text-xs font-semibold">
+                          Amount
+                        </TableHead>
+                        <TableHead className="text-xs font-semibold">
+                          Nature
+                        </TableHead>
+                        <TableHead className="text-xs font-semibold">
+                          Transaction Time
+                        </TableHead>
+                        <TableHead className="text-xs font-semibold">
+                          Closing Balance
+                        </TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {selectedTollHistory.map((toll, index) => (
+                        <TableRow key={index}>
+                          <TableCell className="text-sm">
+                            {toll.tollName}
+                          </TableCell>
+                          <TableCell className="text-sm font-medium">
+                            ₹{toll.amount}
+                          </TableCell>
+                          <TableCell>
+                            <Badge
+                              variant={
+                                toll.nature === "Debit"
+                                  ? "destructive"
+                                  : "default"
+                              }
+                              className="text-xs"
+                            >
+                              {toll.nature}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-sm">
+                            {toll.formattedtransactionDateTime}
+                          </TableCell>
+                          <TableCell className="text-sm font-medium">
+                            ₹{toll.closingBalance}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              ) : (
+                <div className="text-center py-8 text-muted-foreground">
+                  No toll data available
+                </div>
+              )}
+            </div>
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => setTollDetailsDialogOpen(false)}
+              >
+                Close
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Existing Session Details Dialog */}
+        <Dialog
+          open={showExistingDetailsDialog}
+          onOpenChange={setShowExistingDetailsDialog}
+        >
+          <DialogContent className="sm:max-w-2xl max-h-[80vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Existing Vehicle Details</DialogTitle>
+            </DialogHeader>
+            {existingSessionDetails && (
+              <div className="space-y-6 py-2">
+                {/* Vehicle Information */}
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <h3 className="text-sm font-semibold text-blue-800 mb-3">
+                    Vehicle Information
+                  </h3>
+                  <div className="grid grid-cols-2 gap-3 text-sm">
+                    <div>
+                      <span className="font-medium text-blue-700">
+                        Vehicle Number:
+                      </span>
+                      <p className="text-blue-900">
+                        {existingSessionDetails.vehicle_number}
+                      </p>
+                    </div>
+                    <div>
+                      <span className="font-medium text-blue-700">
+                        Car Model:
+                      </span>
+                      <p className="text-blue-900">
+                        {existingSessionDetails.truck_number || "Not specified"}
+                      </p>
+                    </div>
+                    <div>
+                      <span className="font-medium text-blue-700">
+                        Owner Name:
+                      </span>
+                      <p className="text-blue-900">
+                        {existingSessionDetails.customer_name ||
+                          "Not specified"}
+                      </p>
+                    </div>
+                    <div>
+                      <span className="font-medium text-blue-700">Mobile:</span>
+                      <p className="text-blue-900">
+                        {existingSessionDetails.customer_mobile ||
+                          "Not specified"}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Account Information */}
+                <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                  <h3 className="text-sm font-semibold text-green-800 mb-3">
+                    Account Information
+                  </h3>
+                  <div className="grid grid-cols-2 gap-3 text-sm">
+                    <div>
+                      <span className="font-medium text-green-700">Bank:</span>
+                      <p className="text-green-900">
+                        {existingSessionDetails.bank_name}
+                      </p>
+                    </div>
+                    <div>
+                      <span className="font-medium text-green-700">
+                        Form Type:
+                      </span>
+                      <p className="text-green-900">
+                        {existingSessionDetails.formType}
+                      </p>
+                    </div>
+                    <div>
+                      <span className="font-medium text-green-700">
+                        Opening Balance:
+                      </span>
+                      <p className="text-green-900">
+                        ₹{existingSessionDetails.opening_balance}
+                      </p>
+                    </div>
+                    <div>
+                      <span className="font-medium text-green-700">
+                        Session ID:
+                      </span>
+                      <p className="text-green-900 text-xs">
+                        {existingSessionDetails.id}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Timeline Information */}
+                <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
+                  <h3 className="text-sm font-semibold text-purple-800 mb-3">
+                    Timeline Information
+                  </h3>
+                  <div className="grid grid-cols-2 gap-3 text-sm">
+                    <div>
+                      <span className="font-medium text-purple-700">
+                        Created At:
+                      </span>
+                      <p className="text-purple-900">
+                        {existingSessionDetails.created_at
+                          ? new Date(
+                              existingSessionDetails.created_at,
+                            ).toLocaleString()
+                          : "Not specified"}
+                      </p>
+                    </div>
+                    <div>
+                      <span className="font-medium text-purple-700">
+                        Updated At:
+                      </span>
+                      <p className="text-purple-900">
+                        {existingSessionDetails.updated_at
+                          ? new Date(
+                              existingSessionDetails.updated_at,
+                            ).toLocaleString()
+                          : "Not specified"}
+                      </p>
+                    </div>
+                    <div>
+                      <span className="font-medium text-purple-700">
+                        Start Date:
+                      </span>
+                      <p className="text-purple-900">
+                        {existingSessionDetails.start_date
+                          ? new Date(
+                              existingSessionDetails.start_date,
+                            ).toLocaleDateString()
+                          : "Not specified"}
+                      </p>
+                    </div>
+                    <div>
+                      <span className="font-medium text-purple-700">
+                        End Date:
+                      </span>
+                      <p className="text-purple-900">
+                        {existingSessionDetails.end_date
+                          ? new Date(
+                              existingSessionDetails.end_date,
+                            ).toLocaleDateString()
+                          : "Not specified"}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Transactions Note */}
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+                  <h3 className="text-sm font-semibold text-amber-800 mb-2">
+                    Transactions
+                  </h3>
+                  <p className="text-sm text-amber-700">
+                    Transaction history for this vehicle can be viewed in the
+                    main toll details section. The existing opening balance of ₹
+                    {existingSessionDetails.opening_balance} has been used for
+                    the current processing.
+                  </p>
+                </div>
+              </div>
+            )}
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => setShowExistingDetailsDialog(false)}
+              >
+                Close
               </Button>
             </DialogFooter>
           </DialogContent>

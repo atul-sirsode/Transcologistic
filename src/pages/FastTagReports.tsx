@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { motion } from "framer-motion";
 import {
   FileBarChart,
@@ -7,6 +7,7 @@ import {
   CalendarIcon,
   ChevronLeft,
   ChevronRight,
+  Search,
 } from "lucide-react";
 import { AppLayout } from "@/components/AppLayout";
 import { BankSelect } from "@/components/BankSelect";
@@ -14,6 +15,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
+import { Input } from "@/components/ui/input";
 import {
   Popover,
   PopoverContent,
@@ -40,10 +42,11 @@ import { format } from "date-fns";
 import { toast } from "@/hooks/use-toast";
 import { fastTagReportService } from "@/services/fasttag-report-service";
 import { generateReportPDF } from "@/lib/fasttag-report-pdf";
+import { banksApi, type Bank } from "@/lib/banks-api";
 import type { FastTagReportRow } from "@/models/fasttag-report";
 
 export default function FastTagReports() {
-  const [selectedBank, setSelectedBank] = useState("");
+  const [selectedBank, setSelectedBank] = useState("ALL");
   const [startDate, setStartDate] = useState<Date | undefined>(
     new Date(new Date().getFullYear(), new Date().getMonth(), 1),
   );
@@ -53,18 +56,43 @@ export default function FastTagReports() {
   const [loading, setLoading] = useState(false);
   const [rows, setRows] = useState<FastTagReportRow[]>([]);
   const [searched, setSearched] = useState(false);
-
+  const [vehicleSearch, setVehicleSearch] = useState("");
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalRecords, setTotalRecords] = useState(0);
   const [pageSize, setPageSize] = useState(10);
+  const [banks, setBanks] = useState<Bank[]>([]);
 
   const selectedBankName = selectedBank;
+
+  // Fetch banks data on component mount
+  useEffect(() => {
+    const fetchBanks = async () => {
+      try {
+        const banksData = await banksApi.list();
+        setBanks(banksData);
+      } catch (error) {
+        console.error("Failed to fetch banks:", error);
+      }
+    };
+    fetchBanks();
+  }, []);
+
+  // Function to get bank name by formType code
+  const getBankNameByFormType = (formType: string): string => {
+    const bank = banks.find((b) => b.code === formType);
+    return bank?.bank_name || "—";
+  };
 
   const fetchReport = async (page: number, limit: number) => {
     if (!selectedBank) {
       toast({ title: "Please select a bank", variant: "destructive" });
+      return;
+    }
+
+    if (selectedBank !== "ALL" && !selectedBankName) {
+      toast({ title: "Invalid bank selection", variant: "destructive" });
       return;
     }
     if (!startDate || !endDate) {
@@ -76,6 +104,7 @@ export default function FastTagReports() {
         title: "End date must be after start date",
         variant: "destructive",
       });
+
       return;
     }
 
@@ -87,6 +116,9 @@ export default function FastTagReports() {
           bankName: selectedBankName,
           startDate,
           endDate,
+          vehicleNumber: vehicleSearch
+            ? vehicleSearch.trim().toUpperCase()
+            : "",
         },
         page,
         limit,
@@ -140,6 +172,7 @@ export default function FastTagReports() {
         bankName: selectedBankName,
         startDate: startDate!,
         endDate: endDate!,
+        vehicleNumber: vehicleSearch ? vehicleSearch.trim().toUpperCase() : "",
       },
       rows,
     );
@@ -256,6 +289,18 @@ export default function FastTagReports() {
                   </PopoverContent>
                 </Popover>
               </div>
+              <div className="space-y-2">
+                <Label>Vehicle Number</Label>
+                <div className="relative">
+                  <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Search vehicle..."
+                    value={vehicleSearch}
+                    onChange={(e) => setVehicleSearch(e.target.value)}
+                    className="pl-9"
+                  />
+                </div>
+              </div>
               <Button
                 onClick={handleSearch}
                 disabled={loading}
@@ -338,6 +383,9 @@ export default function FastTagReports() {
                               <TableHeader>
                                 <TableRow className="bg-muted/30">
                                   <TableHead className="text-xs font-semibold whitespace-nowrap">
+                                    Bank Name
+                                  </TableHead>
+                                  <TableHead className="text-xs font-semibold whitespace-nowrap">
                                     Processing Time
                                   </TableHead>
                                   <TableHead className="text-xs font-semibold whitespace-nowrap">
@@ -365,6 +413,12 @@ export default function FastTagReports() {
                                   <TableRow
                                     key={`${row.session.id}-${txn.id}-${txnIdx}`}
                                   >
+                                    <TableCell className="text-sm whitespace-nowrap font-medium">
+                                      {row.session.formType} -{" "}
+                                      {getBankNameByFormType(
+                                        row.session.formType,
+                                      )}
+                                    </TableCell>
                                     <TableCell className="text-sm whitespace-nowrap">
                                       {txn.processing_time
                                         ? format(
