@@ -1,4 +1,3 @@
-const BASE_DOMAIN = import.meta.env.VITE_BASE_DOMAIN || "http://localhost:3000";
 import { authHttpClient, httpClient } from "./http-client";
 
 export interface LoginOTPResponse {

@@ -13,8 +13,6 @@ import {
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 
-import { getUserAccess } from "@/lib/admin-settings";
-
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useNavigate } from "react-router-dom";
 import { useSubscriptionExpired } from "@/hooks/use-subscription-status";

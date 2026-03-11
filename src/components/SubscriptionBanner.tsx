@@ -35,29 +35,36 @@ export function SubscriptionBanner() {
 
   if (!sub || dismissed) return null;
 
-  const daysLeft = subscriptionService.getDaysRemaining(sub);
-  const expired = subscriptionService.isExpired(sub);
-  const warning = subscriptionService.shouldShowWarning(sub);
+  const daysLeft = sub ? subscriptionService.getDaysRemaining(sub) : 0;
+  const expired = sub ? subscriptionService.isExpired(sub) : false;
+  const warning = sub ? subscriptionService.shouldShowWarning(sub) : false;
 
   if (!expired && !warning) return null;
-
+  const shouldShow = sub && !dismissed && (expired || warning);
   return (
-    <Alert variant="destructive" className="mb-4 relative">
-      <AlertTriangle className="h-4 w-4" />
-      <AlertTitle>
-        {expired ? "Subscription Expired" : "Subscription Expiring Soon"}
-      </AlertTitle>
-      <AlertDescription>
-        {expired
-          ? "Your subscription has expired. Please subscribe to continue using the app."
-          : `Your subscription ends within ${daysLeft} day${daysLeft !== 1 ? "s" : ""}. Subscribe to continue using the app.`}
-      </AlertDescription>
-      <button
-        onClick={() => setDismissed(true)}
-        className="absolute top-3 right-3 text-destructive hover:opacity-70"
-      >
-        <X className="w-4 h-4" />
-      </button>
-    </Alert>
+    <div
+      className={shouldShow ? "mb-4" : "mb-0"}
+      style={{ minHeight: shouldShow ? undefined : 0, overflow: "hidden" }}
+    >
+      {shouldShow && (
+        <Alert variant="destructive" className="mb-4 relative">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertTitle>
+            {expired ? "Subscription Expired" : "Subscription Expiring Soon"}
+          </AlertTitle>
+          <AlertDescription>
+            {expired
+              ? "Your subscription has expired. Please subscribe to continue using the app."
+              : `Your subscription ends within ${daysLeft} day${daysLeft !== 1 ? "s" : ""}. Subscribe to continue using the app.`}
+          </AlertDescription>
+          <button
+            onClick={() => setDismissed(true)}
+            className="absolute top-3 right-3 text-destructive hover:opacity-70"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </Alert>
+      )}
+    </div>
   );
 }

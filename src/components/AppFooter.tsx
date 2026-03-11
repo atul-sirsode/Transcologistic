@@ -1,6 +1,7 @@
+import React from "react";
 import { Mail, Phone, MapPin, FileText } from "lucide-react";
 
-export function AppFooter() {
+export const AppFooter = React.memo(function AppFooter() {
   return (
     <footer className="border-t border-border bg-card text-muted-foreground">
       <div className="px-3 md:px-6 py-6 md:py-8">
@@ -70,4 +71,4 @@ export function AppFooter() {
       </div>
     </footer>
   );
-}
+});
