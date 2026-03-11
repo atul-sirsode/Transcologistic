@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+/* @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap'); */
 
 @tailwind base;
 @tailwind components;
@@ -103,5 +103,14 @@ All colors MUST be HSL.
 
   body {
     @apply bg-background text-foreground;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      font-synthesis: none;
+      text-size-adjust: 100%;
   }
+     img,
+     video,
+     iframe {
+       max-width: 100%;
+       height: auto;
+     }
 }

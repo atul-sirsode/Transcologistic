@@ -35,9 +35,7 @@ class SubscriptionService {
 
   async getSubscription(username: string): Promise<Subscription | null> {
     try {
-      return await httpClient.get<Subscription>(
-        `${this.basePath}/${encodeURIComponent(username)}`,
-      );
+      return await httpClient.get<Subscription>(`${this.basePath}/${username}`);
     } catch {
       return null;
     }

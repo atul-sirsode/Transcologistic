@@ -34,6 +34,8 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
+import { TollDetailsDialog } from "@/components/TollDetailsDialog";
+import { ExistingVehicleDetailsDialog } from "@/components/ExistingVehicleDetailsDialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
@@ -832,18 +834,35 @@ export default function FastTagUpload() {
       // Get the rows to retry
       const rowsToRetry = processedRows.filter((r) => ids.includes(r._id));
 
-      // Process them using the FastTag service
-      const tollResults = await fastTagService.processFastTagRows(
+      // Enhance row data with MongoDB records and bank codes
+      const enhancedRows = await enhanceRowDataWithMongoRecords(
         rowsToRetry.map((row) => ({
           rc_number: row.data.rc_number,
           bank: row.data.bank,
+          formType: row.data.formType || row.data.bank,
           source_state: row.data.source_state,
           source_city: row.data.source_city,
           destination_state: row.data.destination_state,
           destination_city: row.data.destination_city,
           opening_amount: row.data.opening_amount,
           start_date: row.data.start_date,
+          start_time: row.data.start_time,
           vehicle_type: row.data.vehicle_type,
+        })),
+      );
+
+      // Process them using the FastTag service with enhanced data
+      const tollResults = await fastTagService.processFastTagRows(
+        enhancedRows.map((row) => ({
+          rc_number: row.rc_number,
+          bank: row.bank,
+          source_state: row.source_state,
+          source_city: row.source_city,
+          destination_state: row.destination_state,
+          destination_city: row.destination_city,
+          opening_amount: row.opening_amount,
+          start_date: row.start_date,
+          vehicle_type: row.vehicle_type,
         })),
       );
 
@@ -1590,292 +1609,32 @@ export default function FastTagUpload() {
         </Dialog>
 
         {/* Toll Details Dialog */}
-        <Dialog
+        <TollDetailsDialog
           open={tollDetailsDialogOpen}
           onOpenChange={setTollDetailsDialogOpen}
-        >
-          <DialogContent className="sm:max-w-2xl max-h-[80vh] overflow-y-auto">
-            <DialogHeader>
-              <div className="flex justify-between items-center">
-                <DialogTitle>Toll Details</DialogTitle>
-                {editingRow?.data?.has_existing_record && (
-                  <div className="bg-green-50 border border-green-200 rounded-lg p-3 max-w-md">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center space-x-2">
-                        <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                        <span className="text-sm font-medium text-green-800">
-                          Existing Vehicle Details Found
-                        </span>
-                      </div>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={async () => {
-                          const session = await fetchExistingSessionDetails(
-                            editingRow.data.rc_number,
-                            editingRow.data.formType,
-                          );
-                          if (session) {
-                            setShowExistingDetailsDialog(true);
-                          }
-                        }}
-                        className="text-xs h-7 px-2"
-                      >
-                        View Details
-                      </Button>
-                    </div>
-                    <div className="mt-2 text-xs text-green-700">
-                      Vehicle: {editingRow.data.rc_number} • Opening Balance: ₹
-                      {editingRow.data.opening_amount}
-                    </div>
-                  </div>
-                )}
-              </div>
-            </DialogHeader>
-            <div className="space-y-4 py-2">
-              {selectedTollHistory.length > 0 ? (
-                <div className="rounded-lg border border-border overflow-hidden">
-                  <Table>
-                    <TableHeader>
-                      <TableRow className="bg-muted/50">
-                        <TableHead className="text-xs font-semibold">
-                          Toll Name
-                        </TableHead>
-                        <TableHead className="text-xs font-semibold">
-                          Amount
-                        </TableHead>
-                        <TableHead className="text-xs font-semibold">
-                          Nature
-                        </TableHead>
-                        <TableHead className="text-xs font-semibold">
-                          Transaction Time
-                        </TableHead>
-                        <TableHead className="text-xs font-semibold">
-                          Closing Balance
-                        </TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {selectedTollHistory.map((toll, index) => (
-                        <TableRow key={index}>
-                          <TableCell className="text-sm">
-                            {toll.tollName}
-                          </TableCell>
-                          <TableCell className="text-sm font-medium">
-                            ₹{toll.amount}
-                          </TableCell>
-                          <TableCell>
-                            <Badge
-                              variant={
-                                toll.nature === "Debit"
-                                  ? "destructive"
-                                  : "default"
-                              }
-                              className="text-xs"
-                            >
-                              {toll.nature}
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="text-sm">
-                            {toll.formattedtransactionDateTime}
-                          </TableCell>
-                          <TableCell className="text-sm font-medium">
-                            ₹{toll.closingBalance}
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              ) : (
-                <div className="text-center py-8 text-muted-foreground">
-                  No toll data available
-                </div>
-              )}
-            </div>
-            <DialogFooter>
-              <Button
-                variant="outline"
-                onClick={() => setTollDetailsDialogOpen(false)}
-              >
-                Close
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+          tollHistory={selectedTollHistory}
+          editingRow={editingRow}
+          onViewExistingDetails={
+            editingRow?.data?.has_existing_record
+              ? async () => {
+                  const session = await fetchExistingSessionDetails(
+                    editingRow.data.rc_number,
+                    editingRow.data.formType,
+                  );
+                  if (session) {
+                    setShowExistingDetailsDialog(true);
+                  }
+                }
+              : undefined
+          }
+        />
 
         {/* Existing Session Details Dialog */}
-        <Dialog
+        <ExistingVehicleDetailsDialog
           open={showExistingDetailsDialog}
           onOpenChange={setShowExistingDetailsDialog}
-        >
-          <DialogContent className="sm:max-w-2xl max-h-[80vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle>Existing Vehicle Details</DialogTitle>
-            </DialogHeader>
-            {existingSessionDetails && (
-              <div className="space-y-6 py-2">
-                {/* Vehicle Information */}
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                  <h3 className="text-sm font-semibold text-blue-800 mb-3">
-                    Vehicle Information
-                  </h3>
-                  <div className="grid grid-cols-2 gap-3 text-sm">
-                    <div>
-                      <span className="font-medium text-blue-700">
-                        Vehicle Number:
-                      </span>
-                      <p className="text-blue-900">
-                        {existingSessionDetails.vehicle_number}
-                      </p>
-                    </div>
-                    <div>
-                      <span className="font-medium text-blue-700">
-                        Car Model:
-                      </span>
-                      <p className="text-blue-900">
-                        {existingSessionDetails.truck_number || "Not specified"}
-                      </p>
-                    </div>
-                    <div>
-                      <span className="font-medium text-blue-700">
-                        Owner Name:
-                      </span>
-                      <p className="text-blue-900">
-                        {existingSessionDetails.customer_name ||
-                          "Not specified"}
-                      </p>
-                    </div>
-                    <div>
-                      <span className="font-medium text-blue-700">Mobile:</span>
-                      <p className="text-blue-900">
-                        {existingSessionDetails.customer_mobile ||
-                          "Not specified"}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Account Information */}
-                <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                  <h3 className="text-sm font-semibold text-green-800 mb-3">
-                    Account Information
-                  </h3>
-                  <div className="grid grid-cols-2 gap-3 text-sm">
-                    <div>
-                      <span className="font-medium text-green-700">Bank:</span>
-                      <p className="text-green-900">
-                        {existingSessionDetails.bank_name}
-                      </p>
-                    </div>
-                    <div>
-                      <span className="font-medium text-green-700">
-                        Form Type:
-                      </span>
-                      <p className="text-green-900">
-                        {existingSessionDetails.formType}
-                      </p>
-                    </div>
-                    <div>
-                      <span className="font-medium text-green-700">
-                        Opening Balance:
-                      </span>
-                      <p className="text-green-900">
-                        ₹{existingSessionDetails.opening_balance}
-                      </p>
-                    </div>
-                    <div>
-                      <span className="font-medium text-green-700">
-                        Session ID:
-                      </span>
-                      <p className="text-green-900 text-xs">
-                        {existingSessionDetails.id}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Timeline Information */}
-                <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
-                  <h3 className="text-sm font-semibold text-purple-800 mb-3">
-                    Timeline Information
-                  </h3>
-                  <div className="grid grid-cols-2 gap-3 text-sm">
-                    <div>
-                      <span className="font-medium text-purple-700">
-                        Created At:
-                      </span>
-                      <p className="text-purple-900">
-                        {existingSessionDetails.created_at
-                          ? new Date(
-                              existingSessionDetails.created_at,
-                            ).toLocaleString()
-                          : "Not specified"}
-                      </p>
-                    </div>
-                    <div>
-                      <span className="font-medium text-purple-700">
-                        Updated At:
-                      </span>
-                      <p className="text-purple-900">
-                        {existingSessionDetails.updated_at
-                          ? new Date(
-                              existingSessionDetails.updated_at,
-                            ).toLocaleString()
-                          : "Not specified"}
-                      </p>
-                    </div>
-                    <div>
-                      <span className="font-medium text-purple-700">
-                        Start Date:
-                      </span>
-                      <p className="text-purple-900">
-                        {existingSessionDetails.start_date
-                          ? new Date(
-                              existingSessionDetails.start_date,
-                            ).toLocaleDateString()
-                          : "Not specified"}
-                      </p>
-                    </div>
-                    <div>
-                      <span className="font-medium text-purple-700">
-                        End Date:
-                      </span>
-                      <p className="text-purple-900">
-                        {existingSessionDetails.end_date
-                          ? new Date(
-                              existingSessionDetails.end_date,
-                            ).toLocaleDateString()
-                          : "Not specified"}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Transactions Note */}
-                <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
-                  <h3 className="text-sm font-semibold text-amber-800 mb-2">
-                    Transactions
-                  </h3>
-                  <p className="text-sm text-amber-700">
-                    Transaction history for this vehicle can be viewed in the
-                    main toll details section. The existing opening balance of ₹
-                    {existingSessionDetails.opening_balance} has been used for
-                    the current processing.
-                  </p>
-                </div>
-              </div>
-            )}
-            <DialogFooter>
-              <Button
-                variant="outline"
-                onClick={() => setShowExistingDetailsDialog(false)}
-              >
-                Close
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+          details={existingSessionDetails}
+        />
       </div>
     </AppLayout>
   );

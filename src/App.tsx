@@ -1,3 +1,4 @@
+import React, { Suspense } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -6,21 +7,32 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { RouteProtection } from "@/components/RouteProtection";
 import { ROUTE_PERMISSIONS } from "@/utils/route-permissions";
-import Index from "@/pages/Index";
-import Login from "@/pages/Login";
-import FastTag from "@/pages/FastTag";
-import Settings from "@/pages/Settings";
-import UserMaster from "@/pages/UserMaster";
-import AccessMaster from "@/pages/AccessMaster";
-import NotFound from "@/pages/NotFound";
 import { ThemeProvider } from "./components/ThemeProvider";
-import Home from "@/pages/Home";
-import FastTagHistory from "@/pages/FastTagHistory";
-import FastTagUpload from "@/pages/FastTagUpload";
-import FastTagReports from "@/pages/FastTagReports";
-import ManageSubscription from "@/pages/ManageSubscription";
-
-const queryClient = new QueryClient();
+import { PageLoader } from "@/components/PageLoader";
+import { ProductionProtection } from "@/components/ProductionProtection";
+const Home = React.lazy(() => import("./pages/Home"));
+const Index = React.lazy(() => import("./pages/Index"));
+const Login = React.lazy(() => import("./pages/Login"));
+const FastTag = React.lazy(() => import("./pages/FastTag"));
+const FastTagHistory = React.lazy(() => import("./pages/FastTagHistory"));
+const FastTagUpload = React.lazy(() => import("./pages/FastTagUpload"));
+const FastTagReports = React.lazy(() => import("./pages/FastTagReports"));
+const ManageSubscription = React.lazy(
+  () => import("./pages/ManageSubscription"),
+);
+const Settings = React.lazy(() => import("./pages/Settings"));
+const UserMaster = React.lazy(() => import("./pages/UserMaster"));
+const AccessMaster = React.lazy(() => import("./pages/AccessMaster"));
+const NotFound = React.lazy(() => import("./pages/NotFound"));
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 5 * 60 * 1000,
+      retry: 1,
+      refetchOnWindowFocus: false,
+    },
+  },
+});
 
 function PublicRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useAuth();
@@ -168,9 +180,12 @@ const App = () => (
       <TooltipProvider>
         <BrowserRouter>
           <AuthProvider>
+            <ProductionProtection />
             <Toaster />
             <Sonner />
-            <AppRoutes />
+            <Suspense fallback={<PageLoader />}>
+              <AppRoutes />
+            </Suspense>
           </AuthProvider>
         </BrowserRouter>
       </TooltipProvider>
