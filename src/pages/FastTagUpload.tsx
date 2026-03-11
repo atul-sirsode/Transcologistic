@@ -396,6 +396,9 @@ async function enhanceRowDataWithMongoRecords(
     const bankNameToCodeMap = new Map(
       banks.map((bank) => [bank.bank_name.toLowerCase(), bank.code]),
     );
+    const bankCodeToNameMap = new Map(
+      banks.map((bank) => [bank.code, bank.bank_name]),
+    );
 
     // Get MongoDB sessions with filters for each row
     const uniqueFilters = new Map<string, MongoFastTagFilter>();
@@ -425,7 +428,7 @@ async function enhanceRowDataWithMongoRecords(
             formType: doc.formType,
             id: doc._id,
             bank_id: doc.bank || "",
-            bank_name: doc.bank || "",
+            bank_name: bankCodeToNameMap.get(doc.formType) || doc.bank || "",
             vehicle_number: doc.vehicleNumber,
             customer_name: doc.ownerName,
             customer_mobile: doc.mobile,
@@ -582,6 +585,12 @@ export default function FastTagUpload() {
     bankCode: string,
   ) => {
     try {
+      // Get banks for name mapping
+      const banks = await banksApi.list();
+      const bankCodeToNameMap = new Map(
+        banks.map((bank) => [bank.code, bank.bank_name]),
+      );
+
       const docs = await mongoFastTagRepo.getAll({
         vehicleNumber: rcNumber.toLowerCase(),
         formType: bankCode,
@@ -592,7 +601,7 @@ export default function FastTagUpload() {
           formType: doc.formType,
           id: doc._id,
           bank_id: doc.bank || "",
-          bank_name: doc.bank || "",
+          bank_name: bankCodeToNameMap.get(doc.formType) || doc.bank || "",
           vehicle_number: doc.vehicleNumber,
           customer_name: doc.ownerName,
           customer_mobile: doc.mobile,
