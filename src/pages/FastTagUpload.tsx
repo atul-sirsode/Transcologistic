@@ -1415,7 +1415,22 @@ export default function FastTagUpload() {
                 )}
               </div>
             </div>
-
+            {/* Legend */}
+            <div className="flex flex-wrap items-center gap-4 px-3 py-2 rounded-lg border border-border bg-card">
+              <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                Legend:
+              </span>
+              <div className="flex items-center gap-2">
+                <span className="inline-block w-4 h-4 rounded border border-amber-400/50 bg-amber-500/10" />
+                <span className="text-xs text-foreground">
+                  Existing DB Record
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="inline-block w-4 h-4 rounded border border-border bg-card" />
+                <span className="text-xs text-foreground">New Record</span>
+              </div>
+            </div>
             {/* Results DataTable */}
             <Card>
               <CardContent className="pt-4">
@@ -1458,7 +1473,12 @@ export default function FastTagUpload() {
                         {filteredRows.map((row, idx) => (
                           <TableRow
                             key={row._id}
-                            className={cn(row._selected && "bg-primary/5")}
+                            className={cn(
+                              String(row.data.has_existing_record) === "true"
+                                ? "bg-amber-500/10 hover:bg-amber-500/15"
+                                : "",
+                              row._selected && "bg-primary/5",
+                            )}
                           >
                             <TableCell>
                               <Checkbox
